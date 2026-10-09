@@ -29,9 +29,10 @@ request, with the agent, the model keys and the code staying on their own machin
 Individual engineers on those teams operate it day to day: they label and assign issues, read
 results on the Linear issue or in the tray app, and approve or reject publishing.
 
-Open decision: slices 1 and 2 are single-user (one daemon per engineer's machine, approval only
-from the API key owner). Team features (shared visibility of runs, team-wide governance,
-several approvers) are not designed yet.
+Decided: one person per daemon. Each engineer runs their own daemon on their own machine, and
+only the owner of the Linear API key can approve. Team-wide features (shared visibility of runs,
+several approvers, central governance) are out of scope; teams adopt autoforge one engineer at a
+time.
 
 ## Product Purpose
 
