@@ -1,13 +1,16 @@
 import { mkdir } from "node:fs/promises";
+import { publishToGitHub, PublishError } from "../github.js";
 import { makeRedactor } from "../redact.js";
 import { run, type RunResult } from "../run.js";
 import type { Sandbox } from "../sandbox.js";
 import { readSecrets, type AgentConfig, type Config, type Secrets } from "./config.js";
 import { LinearError, type LinearApi, type LinearIssue } from "./linear.js";
-import { MARKER, renderTask } from "./prompt.js";
+import { MARKER, parseCommand, renderTask, type Command } from "./prompt.js";
 import { routeIssue } from "./route.js";
 import {
+  deletePatch,
   loadState,
+  readPatch,
   saveState,
   writePatch,
   type IssueEntry,
@@ -47,6 +50,14 @@ const ACTIVE: IssueStatus[] = ["queued", "running", "awaiting_approval", "publis
 const RETRYABLE: IssueStatus[] = ["awaiting_approval", "no_changes", "failed", "timed_out"];
 const RETRY_HINT = "Reply `/retry <feedback>` to run it again with your feedback.";
 
+export type CommandOutcome = { ok: boolean; message: string };
+
+const VALID_WHEN: Record<Command["kind"], string> = {
+  publish: "while a result is waiting for approval",
+  discard: "while a result is waiting for approval",
+  retry: "after a run, before it is published or discarded",
+};
+
 export class Daemon {
   private state!: State;
   private readonly secrets: Secrets;
@@ -54,6 +65,7 @@ export class Daemon {
   private readonly now: () => Date;
   private readonly repoUrl: (repo: string) => string;
   private readonly jobs = new Map<string, Job>();
+  private readonly publishes = new Set<Promise<void>>();
   /** The latest copy of each issue seen by a poll. */
   private readonly latest = new Map<string, LinearIssue>();
   private readonly stopping = new AbortController();
@@ -126,9 +138,11 @@ export class Daemon {
     }
   }
 
-  /** Resolves once no run is in flight. */
+  /** Resolves once no run or publish is in flight. */
   async idle(): Promise<void> {
-    while (this.jobs.size) await Promise.all([...this.jobs.values()].map((j) => j.done));
+    while (this.jobs.size || this.publishes.size) {
+      await Promise.all([...[...this.jobs.values()].map((j) => j.done), ...this.publishes]);
+    }
     await this.sending;
     await this.saving;
   }
@@ -159,6 +173,7 @@ export class Daemon {
       (pickup === "all-assigned" ||
         issue.labels.some((l) => l.toLowerCase() === label.toLowerCase()));
     const open = issue.stateType !== "completed" && issue.stateType !== "canceled";
+    if (entry && picked && open) return this.handleComments(issue, entry);
     if (entry) return; // an issue already in state is never picked up twice
     if (picked && open) await this.pickUp(issue);
   }
@@ -304,6 +319,119 @@ export class Daemon {
     this.enqueue(id, resultComment(result, entry), true);
     await this.save();
     await this.flushOutbox();
+  }
+
+  private async handleComments(issue: LinearIssue, entry: IssueEntry): Promise<void> {
+    for (const c of issue.comments) {
+      if (entry.handledCommentIds.includes(c.id) || c.user?.id !== this.state.viewerId) continue;
+      const gate = entry.lastResultCommentAt;
+      if (!gate || Date.parse(c.createdAt) <= Date.parse(gate)) continue;
+      const command = parseCommand(c.body);
+      if (!command) continue;
+      entry.handledCommentIds.push(c.id);
+      this.log("info", "command", `/${command.kind}`, issue.identifier);
+      await this.apply(issue.id, command, true);
+    }
+  }
+
+  private entryOf(issueId: string): IssueEntry | undefined {
+    return Object.hasOwn(this.state.issues, issueId) ? this.state.issues[issueId] : undefined;
+  }
+
+  /** Same checks for Linear comments and the status endpoint. `reply` comments on a wrong state. */
+  private async apply(
+    issueId: string,
+    command: Command,
+    reply: boolean,
+  ): Promise<CommandOutcome | null> {
+    const entry = this.entryOf(issueId);
+    if (!entry) return null;
+    const valid =
+      command.kind === "retry"
+        ? RETRYABLE.includes(entry.status)
+        : entry.status === "awaiting_approval";
+    if (!valid) {
+      const message = `\`/${command.kind}\` did nothing: it only works ${VALID_WHEN[command.kind]} (current status: ${entry.status.replaceAll("_", " ")}).`;
+      if (reply) await this.post(issueId, message);
+      return { ok: false, message };
+    }
+    if (command.kind === "publish") {
+      this.startPublish(issueId, entry, command.force);
+      return { ok: true, message: "publishing" };
+    }
+    // State first, then the irreversible patch delete, so a crash never leaves a status without its patch.
+    const patchOf = entry.status === "awaiting_approval" ? entry.run?.id : undefined;
+    if (command.kind === "discard") {
+      this.set(entry, { status: "discarded" });
+      await this.save();
+      if (patchOf) await deletePatch(this.o.stateDir, patchOf);
+      await this.post(issueId, "Discarded. Nothing was published.");
+      return { ok: true, message: "discarded" };
+    }
+    this.set(entry, {
+      status: "queued",
+      feedback: command.feedback,
+      interruptions: 0,
+      queuedAt: this.now().toISOString(),
+      waiting: undefined,
+    });
+    await this.save();
+    if (patchOf) await deletePatch(this.o.stateDir, patchOf);
+    const why = command.feedback ? " with your feedback" : "";
+    await this.post(
+      issueId,
+      `Queued for autoforge again${why} (position ${this.position(issueId)}).`,
+      true,
+    );
+    return { ok: true, message: "queued" };
+  }
+
+  private startPublish(id: string, entry: IssueEntry, force: boolean): void {
+    this.set(entry, { status: "publishing" });
+    const done = (async () => {
+      await this.save(); // before the push, so a crash never repeats a publish silently
+      try {
+        const patch = entry.run ? await readPatch(this.o.stateDir, entry.run.id) : null;
+        if (!entry.run || patch === null) {
+          throw new PublishError("invalid_result", "the stored patch is missing");
+        }
+        const out = await publishToGitHub(
+          { ...entry.run, patch, logs: "" },
+          {
+            repo: entry.repo,
+            token: this.secrets.githubToken,
+            base: entry.ref,
+            force,
+            gitUrl: this.repoUrl(entry.repo),
+            apiUrl: this.o.github?.apiUrl,
+            fetch: this.o.github?.fetch,
+            signal: this.stopping.signal,
+          },
+        );
+        this.set(entry, { status: "published", prUrl: out.prUrl });
+        await this.save();
+        await deletePatch(this.o.stateDir, entry.run.id);
+        this.log("info", "published", out.prUrl, entry.identifier);
+        await this.post(id, `Draft PR opened: ${out.prUrl}`);
+        await this.o.linear
+          .attachUrl(id, out.prUrl, "Draft PR (autoforge)")
+          .catch((e) => this.log("warn", "attach_failed", errorMessage(e), entry.identifier));
+      } catch (e) {
+        if (this.stopping.signal.aborted) return; // stays "publishing"; the next start hands it back
+        const code = e instanceof PublishError ? e.code : "error";
+        const hint =
+          code === "branch_exists"
+            ? "Reply `/publish force` to overwrite the branch."
+            : "Reply `/publish` to try again.";
+        this.set(entry, { status: "awaiting_approval" });
+        this.log("warn", "publish_failed", `${code}: ${errorMessage(e)}`, entry.identifier);
+        await this.post(id, `Publishing failed (\`${code}\`): ${errorMessage(e)}\n\n${hint}`);
+      }
+      await this.save();
+    })()
+      .catch((e) => this.log("error", "publish_handler_failed", errorMessage(e), entry.identifier))
+      .finally(() => this.publishes.delete(done));
+    this.publishes.add(done);
   }
 
   /** Queues a daemon comment, saves state, then sends. `gate` moves the command window. */
