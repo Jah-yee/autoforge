@@ -336,4 +336,23 @@ describe("daemon core", () => {
       expect(patch).not.toContain(`${k}=`);
     }
   });
+
+  it("masks secrets in a run's failure message before it is stored", async () => {
+    const h = await setup();
+    h.linear.addIssue({ id: "issue-1" });
+    const d = h.make({
+      sandbox: () => ({
+        create: async () => {
+          throw new Error(`could not log in with ${ENV.GITHUB_TOKEN}`);
+        },
+      }),
+    });
+    await d.start();
+    await step(d);
+    const state = await readFile(join(h.dir, "state.json"), "utf8");
+    expect(state).not.toContain(ENV.GITHUB_TOKEN);
+    expect((await readState(h.dir)).issues["issue-1"]?.run?.message).toBe(
+      "could not log in with ***",
+    );
+  });
 });

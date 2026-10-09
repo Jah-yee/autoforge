@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { chmod, readdir, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { SandboxUnavailableError, type Sandbox, type SandboxSession } from "../../src/sandbox.js";
@@ -240,11 +240,11 @@ describe("daemon lifecycle", () => {
     const d2 = h.make();
     await d2.start();
     expect(h.linear.said("issue-1").at(-1)).toBe(
-      "autoforge restarted while publishing, so the pull request may or may not have been opened. Reply `/publish` to try again; if the branch already exists the reply says so, and `/publish force` overwrites it.",
+      "autoforge restarted while publishing, so the pull request may or may not have been opened. Check GitHub for an existing branch or pull request first; reply `/publish force` to push again.",
     );
     expect((await readState(h.dir)).issues["issue-1"]?.status).toBe("awaiting_approval");
 
-    h.reply("issue-1", "/publish");
+    h.reply("issue-1", "/publish force");
     await step(d2);
     expect(h.linear.said("issue-1").at(-1)).toBe("Draft PR opened: https://github.com/o/r/pull/1");
   });
@@ -297,5 +297,72 @@ describe("daemon lifecycle", () => {
     h.reply("issue-1", "/discard").createdAt = "not-a-date";
     await step(d);
     expect((await readState(h.dir)).issues["issue-1"]?.status).toBe("awaiting_approval");
+  });
+
+  it.skipIf(process.getuid?.() === 0)(
+    "marks a run failed, not stuck running, when its result cannot be saved",
+    async () => {
+      const h = await setup();
+      h.linear.addIssue({ id: "issue-1" });
+      const d = h.make();
+      await d.start();
+      await mkdir(join(h.dir, "patches"), { mode: 0o500 });
+      try {
+        await step(d);
+      } finally {
+        await chmod(join(h.dir, "patches"), 0o700);
+      }
+      expect((await readState(h.dir)).issues["issue-1"]?.status).toBe("failed");
+      const last = h.linear.said("issue-1").at(-1) ?? "";
+      expect(last).toMatch(/^autoforge could not save the run result: /);
+      expect(last.endsWith(`\n\n${RETRY}`)).toBe(true);
+    },
+  );
+
+  it("keeps a result that finished while the daemon was stopping", async () => {
+    const h = await setup();
+    let destroying!: () => void;
+    const destroyCalled = new Promise<void>((r) => (destroying = r));
+    let release!: () => void;
+    const released = new Promise<void>((r) => (release = r));
+    const inner = new TempDirSandbox();
+    const sandbox: Sandbox = {
+      create: async () => {
+        const s = await inner.create();
+        return {
+          ...s,
+          destroy: async () => {
+            destroying();
+            await released;
+            await s.destroy();
+          },
+        };
+      },
+    };
+    h.linear.addIssue({ id: "issue-1" });
+    const d = h.make({ sandbox: () => sandbox });
+    await d.start();
+    await d.tick();
+    await destroyCalled; // the run has its result and is cleaning up
+    const stopped = d.stop();
+    release();
+    await stopped;
+    expect((await readState(h.dir)).issues["issue-1"]?.status).toBe("awaiting_approval");
+  });
+
+  it("names the issue when it gives up on a comment", async () => {
+    const h = await setup();
+    h.linear.addIssue({ id: "issue-1" });
+    h.linear.failComments = true;
+    const d = h.make();
+    await d.start();
+    for (let i = 0; i < 120 && !h.logs.some((l) => l.event === "comment_dropped"); i++) {
+      await d.tick();
+    }
+    await d.stop();
+    expect(h.logs.find((l) => l.event === "comment_dropped")).toMatchObject({
+      level: "error",
+      issue: "ENG-1",
+    });
   });
 });

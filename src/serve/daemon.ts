@@ -49,6 +49,10 @@ const DAY = 86_400_000;
 const ACTIVE: IssueStatus[] = ["queued", "running", "awaiting_approval", "publishing"];
 const RETRYABLE: IssueStatus[] = ["awaiting_approval", "no_changes", "failed", "timed_out"];
 const RETRY_HINT = "Reply `/retry <feedback>` to run it again with your feedback.";
+const CHECK_GITHUB_HINT =
+  "Check GitHub for an existing branch or pull request first; reply `/publish force` to push again.";
+const SECRET_WARNING = "Warning: this patch contains one of your secrets and cannot be published.";
+const PUBLISH_TIMEOUT_MS = 300_000;
 
 export type CommandOutcome = { ok: boolean; message: string };
 
@@ -269,7 +273,7 @@ export class Daemon {
         this.set(e, { status: "awaiting_approval" });
         await this.post(
           id,
-          "autoforge restarted while publishing, so the pull request may or may not have been opened. Reply `/publish` to try again; if the branch already exists the reply says so, and `/publish force` overwrites it.",
+          `autoforge restarted while publishing, so the pull request may or may not have been opened. ${CHECK_GITHUB_HINT}`,
         );
       }
     }
@@ -399,7 +403,18 @@ export class Daemon {
         result = e instanceof Error ? e : new Error(String(e));
       }
       await announced;
-      await this.finishRun(id, entry, job, result);
+      try {
+        await this.finishRun(id, entry, job, result);
+      } catch (e) {
+        // For example the patch could not be written: never leave the entry "running".
+        this.log("error", "run_save_failed", errorMessage(e), entry.identifier);
+        this.set(entry, { status: "failed", interruptions: 0 });
+        await this.post(
+          id,
+          `autoforge could not save the run result: ${errorMessage(e)}\n\n${RETRY_HINT}`,
+          true,
+        );
+      }
       await this.save();
     })()
       .catch((e) => this.log("error", "run_handler_failed", errorMessage(e), entry.identifier))
@@ -423,7 +438,10 @@ export class Daemon {
     job: Job,
     result: RunResult | Error,
   ): Promise<void> {
-    if (this.stopping.signal.aborted || job.dropped) return;
+    if (job.dropped) return;
+    // Only a run the stop actually cut short stays "running" for the next start to re-queue.
+    const cut = result instanceof Error || result.reason === "aborted";
+    if (this.stopping.signal.aborted && cut) return;
     if (result instanceof Error) {
       this.set(entry, { status: "failed", interruptions: 0 });
       await this.post(
@@ -451,7 +469,10 @@ export class Daemon {
     if (result.status === "changed") await writePatch(this.o.stateDir, result.id, result.patch);
     this.set(entry, {
       status: result.status === "changed" ? "awaiting_approval" : result.status,
-      run: withoutOutput(result),
+      run: {
+        ...withoutOutput(result),
+        ...(result.message ? { message: this.mask(result.message) } : {}),
+      },
       interruptions: 0,
     });
     this.log(
@@ -460,7 +481,8 @@ export class Daemon {
       result.reason ? `${result.status} (${result.reason})` : result.status,
       entry.identifier,
     );
-    this.enqueue(id, resultComment(result, entry), true);
+    const secret = result.status === "changed" && this.mask(result.patch) !== result.patch;
+    this.enqueue(id, resultComment(result, entry, secret), true);
     await this.save();
     await this.flushOutbox();
   }
@@ -540,17 +562,26 @@ export class Daemon {
         if (!entry.run || patch === null) {
           throw new PublishError("invalid_result", "the stored patch is missing");
         }
+        if (this.mask(patch) !== patch) {
+          throw new PublishError("invalid_result", "the patch contains one of your secrets");
+        }
+        const title = this.latest.get(id)?.title ?? entry.run.task.split("\n")[0]?.trim();
         out = await publishToGitHub(
           { ...entry.run, patch, logs: "" },
           {
             repo: entry.repo,
+            // Only the identifier and title: the description and discussion stay in Linear.
+            body: `${entry.identifier}: ${title}\n\nOpened by autoforge from Linear issue ${entry.identifier}.`,
             token: this.secrets.githubToken,
             base: entry.ref,
             force,
             gitUrl: this.repoUrl(entry.repo),
             apiUrl: this.o.github?.apiUrl,
             fetch: this.o.github?.fetch,
-            signal: this.stopping.signal,
+            signal: AbortSignal.any([
+              this.stopping.signal,
+              AbortSignal.timeout(PUBLISH_TIMEOUT_MS),
+            ]),
           },
         );
       } catch (e) {
@@ -559,7 +590,11 @@ export class Daemon {
         const hint =
           code === "branch_exists"
             ? "Reply `/publish force` to overwrite the branch."
-            : "Reply `/publish` to try again.";
+            : code === "github_api_error" || code === "aborted"
+              ? CHECK_GITHUB_HINT
+              : code === "invalid_result"
+                ? "Reply `/retry <feedback>` to run it again, or `/discard` to drop it."
+                : "Reply `/publish` to try again.";
         this.set(entry, { status: "awaiting_approval" });
         this.log("warn", "publish_failed", `${code}: ${errorMessage(e)}`, entry.identifier);
         await this.post(id, `Publishing failed (\`${code}\`): ${errorMessage(e)}\n\n${hint}`);
@@ -619,7 +654,12 @@ export class Daemon {
         );
         if (item.attempts >= 100) {
           this.state.outbox = this.state.outbox.filter((i) => i !== item);
-          this.log("error", "comment_dropped", "gave up on a comment after 100 attempts");
+          this.log(
+            "error",
+            "comment_dropped",
+            "gave up on a comment after 100 attempts",
+            this.state.issues[item.issueId]?.identifier,
+          );
         }
       }
       await this.save();
@@ -653,7 +693,7 @@ export class Daemon {
   }
 }
 
-function resultComment(r: RunResult, entry: IssueEntry): string {
+function resultComment(r: RunResult, entry: IssueEntry, secret: boolean): string {
   const where = `\`${entry.repo}@${entry.ref}\``;
   if (r.status === "no_changes") {
     return `autoforge finished on ${where} without changing any files.\n\n${RETRY_HINT}`;
@@ -680,6 +720,7 @@ function resultComment(r: RunResult, entry: IssueEntry): string {
     shown,
     fence,
     ...(lines.length > 80 ? [`(first 80 of ${lines.length} lines)`] : []),
+    ...(secret ? ["", SECRET_WARNING] : []),
     "",
     "Reply `/publish` to open a draft PR (`/publish force` overwrites an existing branch), `/retry <feedback>` to run again with your feedback, or `/discard` to drop it.",
   ].join("\n");

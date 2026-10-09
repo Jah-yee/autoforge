@@ -1,10 +1,11 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { rm } from "node:fs/promises";
+import { describe, expect, it, vi } from "vitest";
 import { fakeAgent } from "../fake-agent.js";
 import { git } from "../helpers.js";
 import { OTHER } from "./fake-linear.js";
-import { readState, setup, step } from "./harness.js";
+import { ENV, readState, setup, step } from "./harness.js";
 
 /** An issue that has run once and is waiting for approval (with the edit agent). */
 async function awaiting(o: Parameters<typeof setup>[0] = {}) {
@@ -54,7 +55,7 @@ describe("daemon commands", () => {
     h.reply("issue-1", "/publish");
     await step(h.d);
     expect(h.linear.said("issue-1").at(-1)).toMatch(
-      /^Publishing failed \(`github_api_error`\): .*422.*\n\nReply `\/publish` to try again\.$/s,
+      /^Publishing failed \(`github_api_error`\): .*422.*\n\nCheck GitHub for an existing branch or pull request first; reply `\/publish force` to push again\.$/s,
     );
     expect(await status(h.dir)).toBe("awaiting_approval");
 
@@ -157,5 +158,85 @@ describe("daemon commands", () => {
     );
     expect(h.linear.said("issue-1")).toHaveLength(5);
     expect(await status(h.dir)).toBe("no_changes");
+  });
+
+  it("opens the PR with only the issue identifier and title, never the discussion or feedback", async () => {
+    const h = await setup();
+    h.linear.addIssue({ id: "issue-1" });
+    h.linear.userComment("issue-1", "Internal: the customer is Acme", OTHER);
+    const d = h.make();
+    await d.start();
+    await step(d);
+    h.reply("issue-1", "/retry Mention the launch date");
+    await step(d);
+    h.reply("issue-1", "/publish");
+    await step(d);
+    expect(await status(h.dir)).toBe("published");
+    expect(h.github.pulls[0]?.body.body).toBe(
+      "ENG-1: Fix the greeting\n\nOpened by autoforge from Linear issue ENG-1.",
+    );
+    expect(h.github.pulls[0]?.body.title).toBe("Fix the greeting");
+  });
+
+  it("warns about a secret in the patch and refuses to publish it", async () => {
+    const secret = "sk-live-0123456789";
+    const h = await setup({
+      config: {
+        agent: {
+          image: "unused",
+          command: ["sh", "-c", 'echo "$SECRET_KEY" > leak.txt'],
+          envFrom: ["SECRET_KEY"],
+        },
+      },
+    });
+    h.linear.addIssue({ id: "issue-1" });
+    const d = h.make({ env: { ...ENV, SECRET_KEY: secret } });
+    await d.start();
+    await step(d);
+    const result = h.linear.said("issue-1").at(-1) ?? "";
+    expect(result).toContain("+***");
+    expect(result).toContain(
+      "Warning: this patch contains one of your secrets and cannot be published.",
+    );
+
+    const refs = () => git(h.repo.bare, "for-each-ref", "--format=%(refname)", "refs/heads");
+    const before = await refs();
+    h.reply("issue-1", "/publish");
+    await step(d);
+    expect(h.linear.said("issue-1").at(-1)).toBe(
+      "Publishing failed (`invalid_result`): the patch contains one of your secrets\n\nReply `/retry <feedback>` to run it again, or `/discard` to drop it.",
+    );
+    expect(await status(h.dir)).toBe("awaiting_approval");
+    expect(h.github.pulls).toEqual([]);
+    expect(await refs()).toBe(before);
+    for (const p of h.linear.posted) expect(p.body).not.toContain(secret);
+  });
+
+  it("suggests /retry or /discard when the stored patch is missing", async () => {
+    const h = await awaiting();
+    await rm(h.patchFile);
+    h.reply("issue-1", "/publish");
+    await step(h.d);
+    expect(h.linear.said("issue-1").at(-1)).toBe(
+      "Publishing failed (`invalid_result`): the stored patch is missing\n\nReply `/retry <feedback>` to run it again, or `/discard` to drop it.",
+    );
+    expect(await status(h.dir)).toBe("awaiting_approval");
+  });
+
+  it("gives up on a publish after five minutes and keeps the result", async () => {
+    const h = await awaiting();
+    const real = AbortSignal.timeout.bind(AbortSignal);
+    const spy = vi
+      .spyOn(AbortSignal, "timeout")
+      .mockImplementation((ms) => (ms === 300_000 ? AbortSignal.abort() : real(ms)));
+    try {
+      h.reply("issue-1", "/publish");
+      await step(h.d);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(h.linear.said("issue-1").at(-1)).toMatch(/^Publishing failed \(`aborted`\): /);
+    expect(await status(h.dir)).toBe("awaiting_approval");
+    expect(h.github.pulls).toEqual([]);
   });
 });
