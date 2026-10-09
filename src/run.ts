@@ -1,6 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { LineSplitter } from "./logs.js";
-import type { ExecOptions, Sandbox, SandboxSession } from "./sandbox.js";
+import { LineSplitter, TailBuffer } from "./logs.js";
+import { makeRedactor } from "./redact.js";
+import {
+  SandboxUnavailableError,
+  type ExecOptions,
+  type Sandbox,
+  type SandboxSession,
+} from "./sandbox.js";
 
 export type RunStatus = "changed" | "no_changes" | "failed" | "timed_out";
 export type FailureReason =
@@ -42,14 +48,25 @@ const GIT_ENV = { GIT_TERMINAL_PROMPT: "0" };
 export async function run(options: RunOptions): Promise<RunResult> {
   validate(options);
   const { repo, task, agent, sandbox } = options;
+  const maxPatchBytes = options.maxPatchBytes ?? 10_000_000;
   const emit = options.onEvent ?? (() => {});
-  const lines: string[] = [];
-  const logLine = (stream: "stdout" | "stderr") => (line: string) => {
-    lines.push(line);
+
+  // The token reaches git as a one-off header on the clone command, never as config on disk.
+  const authHeader = repo.token
+    ? `Authorization: Basic ${Buffer.from(`x-access-token:${repo.token}`).toString("base64")}`
+    : undefined;
+  const redact = makeRedactor([...Object.values(agent.env ?? {}), repo.token, authHeader]);
+  const logs = new TailBuffer(options.maxLogBytes ?? 1_000_000);
+  const logLine = (stream: "stdout" | "stderr") => (raw: string) => {
+    const line = redact(raw);
+    logs.push(line);
     emit({ type: "log", stream, line });
   };
   const stdout = new LineSplitter(logLine("stdout"));
   const stderr = new LineSplitter(logLine("stderr"));
+
+  const timeout = AbortSignal.timeout(options.timeoutMs ?? 30 * 60_000);
+  const signal = options.signal ? AbortSignal.any([timeout, options.signal]) : timeout;
 
   const started = Date.now();
   const result: RunResult = {
@@ -67,12 +84,16 @@ export async function run(options: RunOptions): Promise<RunResult> {
   const finish = (fields: Partial<RunResult>): RunResult => {
     emit({ type: "phase", phase: "done" });
     return Object.assign(result, fields, {
-      logs: lines.join("\n"),
+      logs: logs.toString(),
       durationMs: Date.now() - started,
     });
   };
   const fail = (reason: FailureReason, message: string) =>
-    finish({ status: "failed", reason, message });
+    finish({ status: "failed", reason, message: redact(message) });
+  const stopped = () =>
+    options.signal?.aborted
+      ? fail("aborted", "the run was aborted")
+      : finish({ status: "timed_out", message: "the run hit its timeout" });
 
   const inSession = async (s: SandboxSession): Promise<RunResult> => {
     const w = s.workdir;
@@ -88,15 +109,28 @@ export async function run(options: RunOptions): Promise<RunResult> {
         stderr.flush();
       }
     };
-    // Collects stdout instead of logging it.
-    const capture = async (cmd: string[]) => {
+    // Collects stdout instead of logging it, up to `limit` bytes.
+    const capture = async (cmd: string[], limit = Infinity) => {
       let text = "";
-      const r = await exec(cmd, { cwd: w, env: GIT_ENV, onStdout: (c) => (text += c) });
-      return { ok: r.exitCode === 0, text };
+      let bytes = 0;
+      const r = await exec(cmd, {
+        cwd: w,
+        env: GIT_ENV,
+        onStdout: (c) => {
+          bytes += Buffer.byteLength(c);
+          if (bytes <= limit) text += c;
+        },
+      });
+      return { ok: r.exitCode === 0, text, overflow: bytes > limit };
     };
 
     emit({ type: "phase", phase: "cloning" });
-    const clone = await exec(["git", "clone", "--quiet", "--", repo.url, w], { env: GIT_ENV });
+    const auth = authHeader ? ["-c", `http.extraHeader=${authHeader}`] : [];
+    const clone = await exec(["git", ...auth, "clone", "--quiet", "--", repo.url, w], {
+      env: GIT_ENV,
+      signal,
+    });
+    if (signal.aborted) return stopped();
     if (clone.exitCode !== 0)
       return fail("clone_failed", `git clone exited with code ${clone.exitCode}`);
 
@@ -126,26 +160,39 @@ export async function run(options: RunOptions): Promise<RunResult> {
     const agentRun = await exec(command, {
       cwd: w,
       env: { ...agent.env, AUTOFORGE_TASK: task, AUTOFORGE_TASK_FILE: taskFile },
+      signal,
     });
     result.exitCode = agentRun.exitCode;
+    if (options.signal?.aborted) return stopped();
 
     emit({ type: "phase", phase: "collecting" });
     const add = await capture(["git", "add", "-A"]);
-    const diff = await capture(["git", "diff", "--cached", "--binary", baseSha]);
+    const diff = await capture(["git", "diff", "--cached", "--binary", baseSha], maxPatchBytes);
     if (!add.ok || !diff.ok)
       return fail("sandbox_error", "could not collect the agent's changes with git");
+    if (diff.overflow)
+      return fail("patch_too_large", `the patch is larger than ${maxPatchBytes} bytes`);
     const names = await capture(["git", "diff", "--cached", "--name-only", baseSha]);
+    const status: RunStatus = timeout.aborted ? "timed_out" : diff.text ? "changed" : "no_changes";
     return finish({
-      status: diff.text ? "changed" : "no_changes",
+      status,
       patch: diff.text,
       filesChanged: names.text.split("\n").filter(Boolean),
     });
   };
 
   emit({ type: "phase", phase: "creating_sandbox" });
-  const session = await sandbox.create();
+  let session: SandboxSession;
+  try {
+    session = await sandbox.create();
+  } catch (e) {
+    const reason = e instanceof SandboxUnavailableError ? "sandbox_unavailable" : "sandbox_error";
+    return fail(reason, errorMessage(e));
+  }
   try {
     return await inSession(session);
+  } catch (e) {
+    return fail("sandbox_error", errorMessage(e));
   } finally {
     await session.destroy().catch(() => {});
   }
@@ -165,3 +212,5 @@ function validate(o: RunOptions): void {
     if (v !== undefined && !(v > 0)) throw new TypeError(`${key} must be a positive number`);
   }
 }
+
+const errorMessage = (e: unknown) => (e instanceof Error ? e.message : String(e));

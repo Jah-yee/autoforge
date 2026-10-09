@@ -1,7 +1,8 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { run } from "../src/index.js";
+import { SandboxUnavailableError, run, type Sandbox } from "../src/index.js";
 import { fakeAgent } from "./fake-agent.js";
 import { makeBareRepo, type BareRepo } from "./helpers.js";
+import { runSafetyScenarios } from "./safety-scenarios.js";
 import { runScenarios } from "./scenarios.js";
 import { TempDirSandbox } from "./temp-dir-sandbox.js";
 
@@ -67,5 +68,76 @@ describe("validation", () => {
     ["a zero timeout", { timeoutMs: 0 }],
   ])("rejects %s", async (_name, patch) => {
     await expect(run({ ...base(), ...patch })).rejects.toThrow(TypeError);
+  });
+});
+
+describe("run() safety with TempDirSandbox", () => {
+  runSafetyScenarios({
+    sandbox: () => new TempDirSandbox(),
+    repo: () => ({ url: repo.bare, ref: "main" }),
+    target: "hello.txt",
+    timeoutMs: 3_000,
+  });
+});
+
+describe("tokens", () => {
+  // Regression guard: passes in Task 3 too, because Task 3 ignores the token entirely.
+  it("never writes the clone token into .git/config", async () => {
+    const r = await run({
+      ...base(),
+      repo: { url: repo.bare, ref: "main", token: "ghp_secrettoken123" },
+      agent: { command: fakeAgent("read-git-config") },
+    });
+    expect(r.logs).toContain('[remote "origin"]');
+    expect(r.logs).not.toContain("***");
+    expect(r.logs).not.toContain("Authorization");
+  });
+});
+
+describe("sandbox failures", () => {
+  const throwing = (err: Error): Sandbox => ({
+    create: async () => {
+      throw err;
+    },
+  });
+
+  it("maps SandboxUnavailableError to sandbox_unavailable", async () => {
+    const r = await run({
+      ...base(),
+      sandbox: throwing(new SandboxUnavailableError("Docker is not running")),
+    });
+    expect(r).toMatchObject({
+      status: "failed",
+      reason: "sandbox_unavailable",
+      message: "Docker is not running",
+    });
+  });
+
+  it("maps other create errors to sandbox_error", async () => {
+    const r = await run({ ...base(), sandbox: throwing(new Error("boom")) });
+    expect(r).toMatchObject({ status: "failed", reason: "sandbox_error", message: "boom" });
+  });
+
+  it("returns sandbox_error when the session dies mid-run, and still destroys it", async () => {
+    let destroyed = false;
+    const sandbox: Sandbox = {
+      create: async () => ({
+        workdir: "/w",
+        exec: async () => {
+          throw new Error("lost connection");
+        },
+        writeFile: async () => {},
+        destroy: async () => {
+          destroyed = true;
+        },
+      }),
+    };
+    const r = await run({ ...base(), sandbox });
+    expect(r).toMatchObject({
+      status: "failed",
+      reason: "sandbox_error",
+      message: "lost connection",
+    });
+    expect(destroyed).toBe(true);
   });
 });
