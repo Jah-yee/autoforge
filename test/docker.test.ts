@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { DockerSandbox } from "../src/docker.js";
-import { run } from "../src/index.js";
+import { run, type SandboxSession } from "../src/index.js";
 import { proc } from "../src/proc.js";
 import { fakeAgent } from "./fake-agent.js";
 import { runSafetyScenarios } from "./safety-scenarios.js";
@@ -97,17 +97,24 @@ describe.skipIf(!dockerUp && !process.env.AUTOFORGE_REQUIRE_DOCKER)(
       expect(await containers()).toBe(before);
     });
 
-    it("removes the container when create is aborted while docker run is in flight", async () => {
+    it("never resolves create after its signal aborted, and leaves no container", async () => {
       const before = await containers();
+      const late: number[] = [];
       for (const ms of [50, 150, 300, 600]) {
         const ac = new AbortController();
         setTimeout(() => ac.abort(), ms);
-        await ctx
-          .sandbox()
-          .create({ signal: ac.signal })
-          .then((s) => s.destroy())
-          .catch(() => {});
+        let session: SandboxSession | undefined;
+        try {
+          session = await ctx.sandbox().create({ signal: ac.signal });
+          // Resolving is fine only if the abort had not happened yet when create settled.
+          if (ac.signal.aborted) late.push(ms);
+        } catch {
+          // Rejecting is the expected outcome of an abort.
+        } finally {
+          await session?.destroy();
+        }
       }
+      expect(late).toEqual([]);
       expect(await containers()).toBe(before);
     });
 

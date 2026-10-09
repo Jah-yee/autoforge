@@ -156,13 +156,17 @@ flags (not options):
 - `--pids-limit 4096`, so a fork bomb cannot exhaust the host.
 - `--security-opt no-new-privileges` and `--cap-drop ALL --cap-add CHOWN`. The one root step,
   `docker exec -u 0` that creates `/workspace` and chowns it to `user`, needs `CAP_CHOWN`.
-  Everything else runs as `user`, which has no effective capabilities, and no-new-privileges
-  means setuid binaries and file capabilities cannot raise them.
-- `--name autoforge-<uuid>`, so a `docker run` that is aborted before it prints an id (for
-  example during an image pull) can still be removed by name.
+  Everything else runs as `user`; as the default non-root user it has no effective
+  capabilities, and no-new-privileges means setuid binaries and file capabilities cannot raise
+  them. A root `user` would keep `CAP_CHOWN`.
+- `--pull never` and `--name autoforge-<uuid>`, so cleanup after an abort can always find the
+  container by name.
 
-`create()` passes its signal to `docker info` and `docker run`. If the signal fires, it runs
-`docker rm -f` on the container name and rejects.
+`create()` passes its signal to `docker info`, `docker image inspect` and, when the image is
+missing, `docker pull`. Those are the slow, abortable steps. `docker run --pull never` is a
+fast local step and runs without the signal, so a killed client cannot leave the daemon
+creating a container after cleanup. If the signal fired meanwhile, `create()` runs
+`docker rm -f` on the name and rejects.
 
 ### Agent
 
@@ -283,8 +287,8 @@ already pushed).
 - **The clone token** is never written to disk inside the sandbox. For private repos, recommend
   a read-only fine-grained token.
 - **Sandbox defaults:** no host mounts, non-root user, 2 CPU, 4 GB memory, 4096 processes,
-  all capabilities dropped except `CAP_CHOWN` in the bounding set (the agent has none
-  effective), `no-new-privileges`, network on (agents need their model API), `network: "none"` available. The bridge network
+  all capabilities dropped except `CAP_CHOWN` in the bounding set (the agent, as the default
+  non-root user, has none effective), `no-new-privileges`, network on (agents need their model API), `network: "none"` available. The bridge network
   can reach the host (`host.docker.internal` on Docker Desktop), the LAN and cloud metadata
   endpoints; recommend `network: "none"` when the agent does not need the internet.
 - **Known limit:** the agent sees the API keys passed in `agent.env` and has network access, so

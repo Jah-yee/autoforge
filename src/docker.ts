@@ -33,49 +33,54 @@ export class DockerSandbox implements Sandbox {
         "Docker is not running. Start Docker Desktop, OrbStack or Colima and try again.",
       );
     }
-    // A known name, so an aborted `docker run` (which may still create the container) can be
-    // removed even though it never printed an id.
+    // The pull is the slow, abortable part. `docker run --pull never` below is a fast local step
+    // that runs without the signal, so a killed client can never leave a container the daemon
+    // creates after our cleanup.
+    if ((await proc("docker", ["image", "inspect", image], { signal })).exitCode !== 0) {
+      const pulled = await proc("docker", ["pull", "-q", image], { signal });
+      if (signal?.aborted) throw aborted();
+      if (pulled.exitCode !== 0) throw new Error(`docker pull failed: ${pulled.stderr.trim()}`);
+    }
+    if (signal?.aborted) throw aborted();
     const name = `autoforge-${randomUUID()}`;
     const destroy = async () => {
       await proc("docker", ["rm", "-f", name]);
     };
-    const started = await proc(
-      "docker",
-      [
-        "run",
-        "-d",
-        "--rm",
-        "--name",
-        name,
-        "--label",
-        "autoforge=1",
-        "--cpus",
-        String(cpus),
-        "--memory",
-        memory,
-        "--pids-limit",
-        "4096",
-        "--network",
-        network,
-        "--user",
-        user,
-        "--security-opt",
-        "no-new-privileges",
-        "--cap-drop",
-        "ALL",
-        // Only for the root prep step below, which chowns the workdir. The agent runs as `user`
-        // with no effective capabilities, and no-new-privileges stops it gaining this one.
-        "--cap-add",
-        "CHOWN",
-        "-e",
-        "HOME=/tmp",
-        "--entrypoint",
-        "sleep",
-        image,
-        "infinity",
-      ],
-      { signal },
-    );
+    const started = await proc("docker", [
+      "run",
+      "-d",
+      "--rm",
+      "--pull",
+      "never",
+      "--name",
+      name,
+      "--label",
+      "autoforge=1",
+      "--cpus",
+      String(cpus),
+      "--memory",
+      memory,
+      "--pids-limit",
+      "4096",
+      "--network",
+      network,
+      "--user",
+      user,
+      "--security-opt",
+      "no-new-privileges",
+      "--cap-drop",
+      "ALL",
+      // Only for the root prep step below, which chowns the workdir. The agent runs as `user`
+      // with no effective capabilities, and no-new-privileges stops it gaining this one.
+      "--cap-add",
+      "CHOWN",
+      "-e",
+      "HOME=/tmp",
+      "--entrypoint",
+      "sleep",
+      image,
+      "infinity",
+    ]);
     if (signal?.aborted) {
       await destroy();
       throw aborted();

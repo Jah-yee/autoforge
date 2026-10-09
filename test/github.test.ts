@@ -154,6 +154,22 @@ describe("publishToGitHub", () => {
     expect(calls).toHaveLength(0);
   });
 
+  it("says the PR may have been opened when aborted after GitHub accepted the request", async () => {
+    const ac = new AbortController();
+    const fetch = (async () => {
+      ac.abort();
+      return new Response(JSON.stringify({ html_url: "https://github.com/o/r/pull/9" }), {
+        status: 201,
+      });
+    }) as typeof globalThis.fetch;
+    await expect(
+      publishToGitHub(changed, opts({ branch: "autoforge/abort-late", fetch, signal: ac.signal })),
+    ).rejects.toMatchObject({
+      code: "aborted",
+      message: expect.stringContaining("the pull request may have been opened"),
+    });
+  });
+
   it("wraps network failures after the push as github_api_error", async () => {
     const fetch = (async () => {
       throw new Error("ECONNRESET");

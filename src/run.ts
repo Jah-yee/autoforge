@@ -51,14 +51,15 @@ export type RunResult = {
 const GIT_ENV = { GIT_TERMINAL_PROMPT: "0" };
 // The agent owns .git/config, so collect turns off everything in it that can run a command.
 const SAFE_GIT = ["git", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null"];
-// Pinned prefixes and paths, so diff.noprefix, diff.mnemonicPrefix or diff.relative in the
-// agent's config cannot change the patch format that `git apply` on the host expects.
+// Pinned prefixes, paths and color, so diff.noprefix, diff.mnemonicPrefix, diff.relative or
+// color.diff in the agent's config cannot change the patch format `git apply` on the host expects.
 const DIFF_FLAGS = [
   "--no-ext-diff",
   "--no-textconv",
   "--src-prefix=a/",
   "--dst-prefix=b/",
   "--no-relative",
+  "--no-color",
 ];
 
 export async function run(options: RunOptions): Promise<RunResult> {

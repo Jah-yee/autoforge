@@ -91,7 +91,10 @@ export async function publishToGitHub(
   const aborted = (detail = "") => new PublishError("aborted", `publishing was aborted${detail}`);
   const git = async (code: PublishErrorCode, ...args: string[]) => {
     const r = await proc("git", args, { cwd, env, signal: o.signal });
-    if (o.signal?.aborted) throw aborted();
+    // A command that finished is not undone by a late abort; the next step reports it.
+    if (r.exitCode !== 0 && o.signal?.aborted) {
+      throw aborted(args[0] === "push" ? ` (branch ${branch} may have been pushed)` : "");
+    }
     if (r.exitCode !== 0) {
       throw new PublishError(code, redact(`git ${args.join(" ")} failed: ${r.stderr.trim()}`));
     }
@@ -172,7 +175,11 @@ export async function publishToGitHub(
       throw pushed(e instanceof Error ? e.message : String(e));
     }
     const text = await res.text().catch(() => "");
-    if (o.signal?.aborted) throw aborted(` (branch ${branch} was pushed)`);
+    if (o.signal?.aborted) {
+      throw aborted(
+        ` (branch ${branch} was pushed${res.ok ? "; the pull request may have been opened" : ""})`,
+      );
+    }
     if (!res.ok) throw pushed(`status ${res.status}: ${text}`);
     let prUrl: unknown;
     try {

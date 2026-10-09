@@ -75,7 +75,8 @@ commit sha), `fetch_failed`, `apply_failed`, `branch_exists` (pass `force: true`
 - **Sandbox defaults:** no host folders mounted, non-root user, 2 CPUs, 4 GB memory, at most
   4096 processes, all Linux capabilities dropped and `no-new-privileges`, network on (agents
   need their model API). Only `CAP_CHOWN` stays in the bounding set, for the root step that
-  hands `/workspace` to the agent user; the agent itself has no effective capabilities.
+  hands `/workspace` to the agent user; the agent, as the default non-root user, has no
+  effective capabilities.
 - **Network:** the default bridge network can reach your host (`host.docker.internal` on Docker
   Desktop), your LAN and cloud metadata endpoints. Use `network: "none"` when the agent does not
   need the internet.
