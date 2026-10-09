@@ -34,31 +34,33 @@
 
 ## File map
 
-| File | Responsibility |
-| :--- | :--- |
-| `src/proc.ts` | Spawn a command without a shell; stream or collect output; abort kills it |
-| `src/redact.ts` | `makeRedactor(secrets)` |
-| `src/logs.ts` | `LineSplitter`, `TailBuffer` |
-| `src/sandbox.ts` | `Sandbox`, `SandboxSession`, `ExecOptions`, `SandboxUnavailableError` |
-| `src/run.ts` | `run()` and its types |
-| `src/index.ts` | Public exports for `autoforge` |
-| `src/docker.ts` | `DockerSandbox` (`autoforge/docker`) |
-| `src/github.ts` | `publishToGitHub`, `PublishError` (`autoforge/github`) |
-| `test/helpers.ts` | `git()`, `makeBareRepo()`, `advanceMain()` |
-| `test/temp-dir-sandbox.ts` | Test-only host sandbox (never exported) |
-| `test/fake-agent.ts` | Scriptable stand-in agent |
-| `test/scenarios.ts`, `test/safety-scenarios.ts` | Run scenarios shared by the temp-dir and Docker suites |
+| File                                            | Responsibility                                                            |
+| :---------------------------------------------- | :------------------------------------------------------------------------ |
+| `src/proc.ts`                                   | Spawn a command without a shell; stream or collect output; abort kills it |
+| `src/redact.ts`                                 | `makeRedactor(secrets)`                                                   |
+| `src/logs.ts`                                   | `LineSplitter`, `TailBuffer`                                              |
+| `src/sandbox.ts`                                | `Sandbox`, `SandboxSession`, `ExecOptions`, `SandboxUnavailableError`     |
+| `src/run.ts`                                    | `run()` and its types                                                     |
+| `src/index.ts`                                  | Public exports for `autoforge`                                            |
+| `src/docker.ts`                                 | `DockerSandbox` (`autoforge/docker`)                                      |
+| `src/github.ts`                                 | `publishToGitHub`, `PublishError` (`autoforge/github`)                    |
+| `test/helpers.ts`                               | `git()`, `makeBareRepo()`, `advanceMain()`                                |
+| `test/temp-dir-sandbox.ts`                      | Test-only host sandbox (never exported)                                   |
+| `test/fake-agent.ts`                            | Scriptable stand-in agent                                                 |
+| `test/scenarios.ts`, `test/safety-scenarios.ts` | Run scenarios shared by the temp-dir and Docker suites                    |
 
 ---
 
 ### Task 1: Project scaffold and core utilities
 
 **Files:**
+
 - Create: `package.json`, `tsconfig.json`, `tsconfig.build.json`, `vitest.config.ts`, `eslint.config.js`, `.prettierrc`, `.prettierignore`, `.gitignore`
 - Create: `src/proc.ts`, `src/redact.ts`, `src/logs.ts`
 - Test: `test/proc.test.ts`, `test/redact.test.ts`, `test/logs.test.ts`
 
 **Interfaces:**
+
 - Produces:
   - `proc(cmd: string, args: string[], o?: ProcOptions): Promise<ProcResult>` where `ProcOptions = { cwd?, env?: NodeJS.ProcessEnv, input?: string, signal?: AbortSignal, onStdout?, onStderr?, killGroup?: boolean }` and `ProcResult = { exitCode: number | null; stdout: string; stderr: string }`. Never rejects. `stdout`/`stderr` are only collected when no callback is given.
   - `makeRedactor(secrets: Iterable<string | undefined>): (text: string) => string`
@@ -420,11 +422,13 @@ git commit -m "chore: scaffold autoforge with proc, redaction and log utilities"
 ### Task 2: Sandbox interface and test harness
 
 **Files:**
+
 - Create: `src/sandbox.ts`
 - Create: `test/temp-dir-sandbox.ts`, `test/helpers.ts`, `test/fake-agent.ts`
 - Test: `test/harness.test.ts`
 
 **Interfaces:**
+
 - Consumes: `proc` (Task 1).
 - Produces:
   - `type ExecOptions = { cwd?: string; env?: Record<string, string>; signal?: AbortSignal; onStdout?: (chunk: string) => void; onStderr?: (chunk: string) => void }`
@@ -673,10 +677,12 @@ git commit -m "feat: sandbox interface and test harness"
 ### Task 3: `run()` core flow
 
 **Files:**
+
 - Create: `src/run.ts`, `src/index.ts`, `test/scenarios.ts`
 - Test: `test/run.test.ts`
 
 **Interfaces:**
+
 - Consumes: `Sandbox`, `SandboxSession`, `ExecOptions` (Task 2); `LineSplitter` (Task 1); test harness (Task 2).
 - Produces (types are final here; Task 4 only changes the implementation):
   - `run(options: RunOptions): Promise<RunResult>`
@@ -821,7 +827,11 @@ describe("refs and clone", () => {
 
   it("returns clone_failed for a missing repo and still destroys the sandbox", async () => {
     const sandbox = new TempDirSandbox();
-    const r = await run({ ...base(), sandbox, repo: { url: "/nonexistent/repo.git", ref: "main" } });
+    const r = await run({
+      ...base(),
+      sandbox,
+      repo: { url: "/nonexistent/repo.git", ref: "main" },
+    });
     expect(r).toMatchObject({ status: "failed", reason: "clone_failed" });
     expect(r.baseSha).toBeUndefined();
     expect(sandbox.destroyed).toBe(1);
@@ -838,7 +848,10 @@ describe("validation", () => {
     ["an empty task", { task: "  " }],
     ["an empty command", { agent: { command: [] } }],
     ["a ref that looks like a flag", { repo: { url: "/x", ref: "-x" } }],
-    ["a url that looks like a flag", { repo: { url: "--upload-pack=touch /tmp/pwned", ref: "main" } }],
+    [
+      "a url that looks like a flag",
+      { repo: { url: "--upload-pack=touch /tmp/pwned", ref: "main" } },
+    ],
     ["a zero timeout", { timeoutMs: 0 }],
   ])("rejects %s", async (_name, patch) => {
     await expect(run({ ...base(), ...patch })).rejects.toThrow(TypeError);
@@ -857,14 +870,7 @@ Expected: FAIL, "Failed to load url ../src/index.js".
 
 ```ts
 export { run } from "./run.js";
-export type {
-  FailureReason,
-  Phase,
-  RunEvent,
-  RunOptions,
-  RunResult,
-  RunStatus,
-} from "./run.js";
+export type { FailureReason, Phase, RunEvent, RunOptions, RunResult, RunStatus } from "./run.js";
 export { SandboxUnavailableError } from "./sandbox.js";
 export type { ExecOptions, Sandbox, SandboxSession } from "./sandbox.js";
 ```
@@ -878,15 +884,10 @@ import type { ExecOptions, Sandbox, SandboxSession } from "./sandbox.js";
 
 export type RunStatus = "changed" | "no_changes" | "failed" | "timed_out";
 export type FailureReason =
-  | "aborted"
-  | "clone_failed"
-  | "sandbox_unavailable"
-  | "sandbox_error"
-  | "patch_too_large";
+  "aborted" | "clone_failed" | "sandbox_unavailable" | "sandbox_error" | "patch_too_large";
 export type Phase = "creating_sandbox" | "cloning" | "running" | "collecting" | "done";
 export type RunEvent =
-  | { type: "phase"; phase: Phase }
-  | { type: "log"; stream: "stdout" | "stderr"; line: string };
+  { type: "phase"; phase: Phase } | { type: "log"; stream: "stdout" | "stderr"; line: string };
 
 export type RunOptions = {
   repo: { url: string; ref: string; token?: string };
@@ -945,7 +946,10 @@ export async function run(options: RunOptions): Promise<RunResult> {
   };
   const finish = (fields: Partial<RunResult>): RunResult => {
     emit({ type: "phase", phase: "done" });
-    return Object.assign(result, fields, { logs: lines.join("\n"), durationMs: Date.now() - started });
+    return Object.assign(result, fields, {
+      logs: lines.join("\n"),
+      durationMs: Date.now() - started,
+    });
   };
   const fail = (reason: FailureReason, message: string) =>
     finish({ status: "failed", reason, message });
@@ -973,7 +977,8 @@ export async function run(options: RunOptions): Promise<RunResult> {
 
     emit({ type: "phase", phase: "cloning" });
     const clone = await exec(["git", "clone", "--quiet", "--", repo.url, w], { env: GIT_ENV });
-    if (clone.exitCode !== 0) return fail("clone_failed", `git clone exited with code ${clone.exitCode}`);
+    if (clone.exitCode !== 0)
+      return fail("clone_failed", `git clone exited with code ${clone.exitCode}`);
 
     let baseSha = "";
     for (const rev of [`origin/${repo.ref}^{commit}`, `${repo.ref}^{commit}`]) {
@@ -1007,7 +1012,8 @@ export async function run(options: RunOptions): Promise<RunResult> {
     emit({ type: "phase", phase: "collecting" });
     const add = await capture(["git", "add", "-A"]);
     const diff = await capture(["git", "diff", "--cached", "--binary", baseSha]);
-    if (!add.ok || !diff.ok) return fail("sandbox_error", "could not collect the agent's changes with git");
+    if (!add.ok || !diff.ok)
+      return fail("sandbox_error", "could not collect the agent's changes with git");
     const names = await capture(["git", "diff", "--cached", "--name-only", baseSha]);
     return finish({
       status: diff.text ? "changed" : "no_changes",
@@ -1026,7 +1032,8 @@ export async function run(options: RunOptions): Promise<RunResult> {
 }
 
 function validate(o: RunOptions): void {
-  if (typeof o.task !== "string" || !o.task.trim()) throw new TypeError("task must be a non-empty string");
+  if (typeof o.task !== "string" || !o.task.trim())
+    throw new TypeError("task must be a non-empty string");
   if (!o.repo?.url || !o.repo.ref) throw new TypeError("repo.url and repo.ref are required");
   if (o.repo.url.startsWith("-") || o.repo.ref.startsWith("-")) {
     throw new TypeError("repo.url and repo.ref must not start with '-'");
@@ -1058,11 +1065,13 @@ git commit -m "feat: run() clones, runs the agent and returns its patch"
 ### Task 4: Timeouts, abort, redaction, limits and sandbox failures
 
 **Files:**
+
 - Modify: `src/run.ts` (full replacement below)
 - Create: `test/safety-scenarios.ts`
 - Modify: `test/run.test.ts` (append)
 
 **Interfaces:**
+
 - Consumes: everything from Task 3; `makeRedactor`, `TailBuffer` (Task 1); `SandboxUnavailableError` (Task 2).
 - Produces: `runSafetyScenarios(ctx: ScenarioContext): void` in `test/safety-scenarios.ts`. No public type changes.
 
@@ -1193,7 +1202,11 @@ describe("sandbox failures", () => {
       }),
     };
     const r = await run({ ...base(), sandbox });
-    expect(r).toMatchObject({ status: "failed", reason: "sandbox_error", message: "lost connection" });
+    expect(r).toMatchObject({
+      status: "failed",
+      reason: "sandbox_error",
+      message: "lost connection",
+    });
     expect(destroyed).toBe(true);
   });
 });
@@ -1219,15 +1232,10 @@ import {
 
 export type RunStatus = "changed" | "no_changes" | "failed" | "timed_out";
 export type FailureReason =
-  | "aborted"
-  | "clone_failed"
-  | "sandbox_unavailable"
-  | "sandbox_error"
-  | "patch_too_large";
+  "aborted" | "clone_failed" | "sandbox_unavailable" | "sandbox_error" | "patch_too_large";
 export type Phase = "creating_sandbox" | "cloning" | "running" | "collecting" | "done";
 export type RunEvent =
-  | { type: "phase"; phase: Phase }
-  | { type: "log"; stream: "stdout" | "stderr"; line: string };
+  { type: "phase"; phase: Phase } | { type: "log"; stream: "stdout" | "stderr"; line: string };
 
 export type RunOptions = {
   repo: { url: string; ref: string; token?: string };
@@ -1297,7 +1305,10 @@ export async function run(options: RunOptions): Promise<RunResult> {
   };
   const finish = (fields: Partial<RunResult>): RunResult => {
     emit({ type: "phase", phase: "done" });
-    return Object.assign(result, fields, { logs: logs.toString(), durationMs: Date.now() - started });
+    return Object.assign(result, fields, {
+      logs: logs.toString(),
+      durationMs: Date.now() - started,
+    });
   };
   const fail = (reason: FailureReason, message: string) =>
     finish({ status: "failed", reason, message: redact(message) });
@@ -1342,7 +1353,8 @@ export async function run(options: RunOptions): Promise<RunResult> {
       signal,
     });
     if (signal.aborted) return stopped();
-    if (clone.exitCode !== 0) return fail("clone_failed", `git clone exited with code ${clone.exitCode}`);
+    if (clone.exitCode !== 0)
+      return fail("clone_failed", `git clone exited with code ${clone.exitCode}`);
 
     let baseSha = "";
     for (const rev of [`origin/${repo.ref}^{commit}`, `${repo.ref}^{commit}`]) {
@@ -1378,8 +1390,10 @@ export async function run(options: RunOptions): Promise<RunResult> {
     emit({ type: "phase", phase: "collecting" });
     const add = await capture(["git", "add", "-A"]);
     const diff = await capture(["git", "diff", "--cached", "--binary", baseSha], maxPatchBytes);
-    if (!add.ok || !diff.ok) return fail("sandbox_error", "could not collect the agent's changes with git");
-    if (diff.overflow) return fail("patch_too_large", `the patch is larger than ${maxPatchBytes} bytes`);
+    if (!add.ok || !diff.ok)
+      return fail("sandbox_error", "could not collect the agent's changes with git");
+    if (diff.overflow)
+      return fail("patch_too_large", `the patch is larger than ${maxPatchBytes} bytes`);
     const names = await capture(["git", "diff", "--cached", "--name-only", baseSha]);
     const status: RunStatus = timeout.aborted ? "timed_out" : diff.text ? "changed" : "no_changes";
     return finish({
@@ -1407,7 +1421,8 @@ export async function run(options: RunOptions): Promise<RunResult> {
 }
 
 function validate(o: RunOptions): void {
-  if (typeof o.task !== "string" || !o.task.trim()) throw new TypeError("task must be a non-empty string");
+  if (typeof o.task !== "string" || !o.task.trim())
+    throw new TypeError("task must be a non-empty string");
   if (!o.repo?.url || !o.repo.ref) throw new TypeError("repo.url and repo.ref are required");
   if (o.repo.url.startsWith("-") || o.repo.ref.startsWith("-")) {
     throw new TypeError("repo.url and repo.ref must not start with '-'");
@@ -1441,10 +1456,12 @@ git commit -m "feat: run() timeouts, abort, secret masking, log and patch limits
 ### Task 5: `DockerSandbox`
 
 **Files:**
+
 - Create: `src/docker.ts`
 - Test: `test/docker.test.ts`
 
 **Interfaces:**
+
 - Consumes: `proc` (Task 1); `Sandbox`, `SandboxSession`, `ExecOptions`, `SandboxUnavailableError` (Task 2); `run` (Task 4); `runScenarios`, `runSafetyScenarios`, `options` (Tasks 3 and 4).
 - Produces: `class DockerSandbox implements Sandbox { constructor(options: DockerSandboxOptions) }`, `type DockerSandboxOptions = { image: string; cpus?: number; memory?: string; network?: "bridge" | "none"; user?: string }`.
 
@@ -1572,15 +1589,24 @@ export class DockerSandbox implements Sandbox {
       );
     }
     const started = await proc("docker", [
-      "run", "-d",
-      "--label", "autoforge=1",
-      "--cpus", String(cpus),
-      "--memory", memory,
-      "--network", network,
-      "--user", user,
-      "-e", "HOME=/tmp",
-      "--entrypoint", "sleep",
-      image, "infinity",
+      "run",
+      "-d",
+      "--label",
+      "autoforge=1",
+      "--cpus",
+      String(cpus),
+      "--memory",
+      memory,
+      "--network",
+      network,
+      "--user",
+      user,
+      "-e",
+      "HOME=/tmp",
+      "--entrypoint",
+      "sleep",
+      image,
+      "infinity",
     ]);
     if (started.exitCode !== 0) throw new Error(`docker run failed: ${started.stderr.trim()}`);
     const id = started.stdout.trim();
@@ -1589,8 +1615,16 @@ export class DockerSandbox implements Sandbox {
     };
 
     const prep = await proc("docker", [
-      "exec", "-u", "0", id,
-      "sh", "-c", 'mkdir -p "$1" && chown "$2" "$1"', "sh", WORKDIR, user,
+      "exec",
+      "-u",
+      "0",
+      id,
+      "sh",
+      "-c",
+      'mkdir -p "$1" && chown "$2" "$1"',
+      "sh",
+      WORKDIR,
+      user,
     ]);
     if (prep.exitCode !== 0) {
       await destroy();
@@ -1604,10 +1638,13 @@ export class DockerSandbox implements Sandbox {
         const r = await proc(
           "docker",
           [
-            "exec", "-u", user,
+            "exec",
+            "-u",
+            user,
             ...(o.cwd ? ["-w", o.cwd] : []),
             ...Object.keys(env).flatMap((k) => ["-e", k]),
-            id, ...cmd,
+            id,
+            ...cmd,
           ],
           {
             // `-e NAME` makes docker read the value from its own env, so secrets never show in `ps`.
@@ -1620,14 +1657,33 @@ export class DockerSandbox implements Sandbox {
         // Killing the docker client leaves the process running in the container. PID 1 (sleep)
         // ignores SIGKILL from inside its namespace, so this stops everything else.
         if (o.signal?.aborted) {
-          await proc("docker", ["exec", "-u", user, id, "sh", "-c", "kill -9 -1 2>/dev/null; true"]);
+          await proc("docker", [
+            "exec",
+            "-u",
+            user,
+            id,
+            "sh",
+            "-c",
+            "kill -9 -1 2>/dev/null; true",
+          ]);
         }
         return { exitCode: r.exitCode };
       },
       async writeFile(path: string, content: string) {
         const r = await proc(
           "docker",
-          ["exec", "-i", "-u", user, id, "sh", "-c", 'mkdir -p "$(dirname "$1")" && cat > "$1"', "sh", path],
+          [
+            "exec",
+            "-i",
+            "-u",
+            user,
+            id,
+            "sh",
+            "-c",
+            'mkdir -p "$(dirname "$1")" && cat > "$1"',
+            "sh",
+            path,
+          ],
           { input: content },
         );
         if (r.exitCode !== 0) throw new Error(`writeFile ${path} failed: ${r.stderr.trim()}`);
@@ -1660,10 +1716,12 @@ git commit -m "feat: DockerSandbox"
 ### Task 6: `publishToGitHub`
 
 **Files:**
+
 - Create: `src/github.ts`
 - Test: `test/github.test.ts`
 
 **Interfaces:**
+
 - Consumes: `proc` (Task 1); `RunResult` (Task 3); `run` and test harness for building a real result.
 - Produces:
   - `publishToGitHub(result: RunResult, o: PublishOptions): Promise<{ prUrl: string; branch: string; commitSha: string }>`
@@ -1731,13 +1789,20 @@ describe("publishToGitHub", () => {
     expect(calls[0]?.url).toBe("https://api.example.test/repos/o/r/pulls");
     expect(new Headers(calls[0]?.init.headers).get("authorization")).toBe("Bearer tkn-123456");
     const body = JSON.parse(String(calls[0]?.init.body));
-    expect(body).toMatchObject({ title: "Fix the greeting", head: out.branch, base: "main", draft: true });
+    expect(body).toMatchObject({
+      title: "Fix the greeting",
+      head: out.branch,
+      base: "main",
+      draft: true,
+    });
     expect(body.body).toContain("More detail here.");
   });
 
   it("refuses to overwrite an existing branch unless forced", async () => {
     await publishToGitHub(changed, opts({ branch: "autoforge/fixed" }));
-    await expect(publishToGitHub(changed, opts({ branch: "autoforge/fixed" }))).rejects.toMatchObject({
+    await expect(
+      publishToGitHub(changed, opts({ branch: "autoforge/fixed" })),
+    ).rejects.toMatchObject({
       name: "PublishError",
       code: "branch_exists",
     });
@@ -1879,7 +1944,13 @@ export async function publishToGitHub(
   try {
     await mkdir(cwd);
     await git("fetch_failed", "init", "-q");
-    await git("fetch_failed", "remote", "add", "origin", o.gitUrl ?? `https://github.com/${o.repo}.git`);
+    await git(
+      "fetch_failed",
+      "remote",
+      "add",
+      "origin",
+      o.gitUrl ?? `https://github.com/${o.repo}.git`,
+    );
     await git("fetch_failed", "fetch", "-q", "--depth", "1", "origin", result.baseSha);
     await git("fetch_failed", "checkout", "-q", "--detach", "FETCH_HEAD");
 
@@ -1888,17 +1959,38 @@ export async function publishToGitHub(
     await git("apply_failed", "apply", "--binary", "--index", patchFile);
     await git(
       "apply_failed",
-      "-c", `user.name=${author.name}`,
-      "-c", `user.email=${author.email}`,
-      "commit", "-q", "-m", title,
+      "-c",
+      `user.name=${author.name}`,
+      "-c",
+      `user.email=${author.email}`,
+      "commit",
+      "-q",
+      "-m",
+      title,
     );
     const commitSha = await git("apply_failed", "rev-parse", "HEAD");
 
-    const existing = await git("push_failed", "ls-remote", "--heads", "origin", `refs/heads/${branch}`);
+    const existing = await git(
+      "push_failed",
+      "ls-remote",
+      "--heads",
+      "origin",
+      `refs/heads/${branch}`,
+    );
     if (existing && !o.force) {
-      throw new PublishError("branch_exists", `branch ${branch} already exists; pass force: true to overwrite it`);
+      throw new PublishError(
+        "branch_exists",
+        `branch ${branch} already exists; pass force: true to overwrite it`,
+      );
     }
-    await git("push_failed", "push", "-q", ...(o.force ? ["--force"] : []), "origin", `HEAD:refs/heads/${branch}`);
+    await git(
+      "push_failed",
+      "push",
+      "-q",
+      ...(o.force ? ["--force"] : []),
+      "origin",
+      `HEAD:refs/heads/${branch}`,
+    );
 
     const res = await doFetch(`${apiUrl}/repos/${o.repo}/pulls`, {
       method: "POST",
@@ -1950,9 +2042,11 @@ git commit -m "feat: publishToGitHub applies the patch on the host and opens a d
 ### Task 7: Package exports, docs, example and CI
 
 **Files:**
+
 - Create: `README.md`, `CONTRIBUTING.md`, `LICENSE`, `examples/basic.ts`, `examples/Dockerfile`, `.github/workflows/ci.yml`
 
 **Interfaces:**
+
 - Consumes: the public API from Tasks 3 to 6.
 - Produces: a buildable package whose three entry points resolve.
 
@@ -2069,12 +2163,12 @@ See `examples/basic.ts` for a complete Claude Code example.
 
 ## Results
 
-| status | meaning |
-| :--- | :--- |
-| `changed` | The agent changed files. `patch` holds the diff against `baseSha`. |
-| `no_changes` | The agent finished without changing anything. |
-| `timed_out` | The timeout (default 30 minutes) stopped the agent. Any partial patch is kept for inspection. |
-| `failed` | See `reason`: `aborted`, `clone_failed`, `sandbox_unavailable`, `sandbox_error`, `patch_too_large`. |
+| status       | meaning                                                                                             |
+| :----------- | :-------------------------------------------------------------------------------------------------- |
+| `changed`    | The agent changed files. `patch` holds the diff against `baseSha`.                                  |
+| `no_changes` | The agent finished without changing anything.                                                       |
+| `timed_out`  | The timeout (default 30 minutes) stopped the agent. Any partial patch is kept for inspection.       |
+| `failed`     | See `reason`: `aborted`, `clone_failed`, `sandbox_unavailable`, `sandbox_error`, `patch_too_large`. |
 
 `run()` never throws for these. It only throws `TypeError` for invalid options.
 

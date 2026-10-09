@@ -12,11 +12,11 @@ model API keys. There is no autoforge server or account.
 
 The project ships in slices. Each slice gets its own spec, plan and implementation.
 
-| Slice | What it is | Status |
-| :--- | :--- | :--- |
-| 1 | `autoforge` TypeScript SDK: run an agent in a local sandbox, return a diff, optionally publish it as a GitHub PR | this spec |
-| 2 | `autoforge serve`: a local CLI daemon built on the SDK. Polls Linear for issues assigned to the user, runs them, posts progress back, opens the PR (optional terminal approval first), links it on the issue | next spec |
-| later | Jira poller, persistent sandboxes, menu-bar UI, multi-step missions, GitLab | not planned yet |
+| Slice | What it is                                                                                                                                                                                                   | Status          |
+| :---- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :-------------- |
+| 1     | `autoforge` TypeScript SDK: run an agent in a local sandbox, return a diff, optionally publish it as a GitHub PR                                                                                             | this spec       |
+| 2     | `autoforge serve`: a local CLI daemon built on the SDK. Polls Linear for issues assigned to the user, runs them, posts progress back, opens the PR (optional terminal approval first), links it on the issue | next spec       |
+| later | Jira poller, persistent sandboxes, menu-bar UI, multi-step missions, GitLab                                                                                                                                  | not planned yet |
 
 ### Success criteria for slice 1
 
@@ -28,16 +28,16 @@ The project ships in slices. Each slice gets its own spec, plan and implementati
 
 ### Decisions already made
 
-| Decision | Choice |
-| :--- | :--- |
-| Form | Embeddable library (SDK) that any dev tool can import |
-| Language | TypeScript, ESM only, Node 22+ |
-| Sandbox | Pluggable `Sandbox` interface; Docker implementation ships first |
-| Agent | Bring your own: the host supplies a command. No agent adapters ship |
-| Output | Plain serializable result; separate opt-in GitHub publisher |
-| Approval | Two stateless calls. Approval is the host deciding whether to call `publishToGitHub` |
-| Licence | MIT |
-| Hosting | Local repo at `~/dev/autoforge`; GitHub remote on the owner's personal account, created only when the owner says so |
+| Decision | Choice                                                                                                              |
+| :------- | :------------------------------------------------------------------------------------------------------------------ |
+| Form     | Embeddable library (SDK) that any dev tool can import                                                               |
+| Language | TypeScript, ESM only, Node 22+                                                                                      |
+| Sandbox  | Pluggable `Sandbox` interface; Docker implementation ships first                                                    |
+| Agent    | Bring your own: the host supplies a command. No agent adapters ship                                                 |
+| Output   | Plain serializable result; separate opt-in GitHub publisher                                                         |
+| Approval | Two stateless calls. Approval is the host deciding whether to call `publishToGitHub`                                |
+| Licence  | MIT                                                                                                                 |
+| Hosting  | Local repo at `~/dev/autoforge`; GitHub remote on the owner's personal account, created only when the owner says so |
 
 ## 2. Package layout and public API
 
@@ -74,18 +74,18 @@ Plain JSON. Safe to store in any database or file.
 
 ```ts
 type RunResult = {
-  id: string;                        // random, used for branch names
+  id: string; // random, used for branch names
   status: "changed" | "no_changes" | "failed" | "timed_out";
   reason?: "aborted" | "clone_failed" | "sandbox_unavailable" | "sandbox_error" | "patch_too_large";
-  message?: string;                  // human-readable detail when failed
-  repo: { url: string; ref: string };  // never contains the token
+  message?: string; // human-readable detail when failed
+  repo: { url: string; ref: string }; // never contains the token
   task: string;
-  baseSha?: string;                  // absent if the clone failed
-  patch: string;                     // empty unless status is "changed"
+  baseSha?: string; // absent if the clone failed
+  patch: string; // empty unless status is "changed"
   filesChanged: string[];
-  logs: string;                      // redacted, tail-truncated
-  exitCode: number | null;           // null if the agent never ran or was killed
-  startedAt: string;                 // ISO 8601
+  logs: string; // redacted, tail-truncated
+  exitCode: number | null; // null if the agent never ran or was killed
+  startedAt: string; // ISO 8601
   durationMs: number;
 };
 ```
@@ -95,7 +95,7 @@ type RunResult = {
 ```ts
 type RunEvent =
   | { type: "phase"; phase: "creating_sandbox" | "cloning" | "running" | "collecting" | "done" }
-  | { type: "log"; stream: "stdout" | "stderr"; line: string };   // redacted
+  | { type: "log"; stream: "stdout" | "stderr"; line: string }; // redacted
 ```
 
 ### `Sandbox` interface
@@ -108,14 +108,17 @@ interface Sandbox {
 }
 
 interface SandboxSession {
-  readonly workdir: string;      // where the repo is cloned; "/workspace" for Docker
-  exec(cmd: string[], opts: {
-    cwd?: string;
-    env?: Record<string, string>;
-    signal?: AbortSignal;
-    onStdout?: (chunk: string) => void;
-    onStderr?: (chunk: string) => void;
-  }): Promise<{ exitCode: number | null }>;
+  readonly workdir: string; // where the repo is cloned; "/workspace" for Docker
+  exec(
+    cmd: string[],
+    opts: {
+      cwd?: string;
+      env?: Record<string, string>;
+      signal?: AbortSignal;
+      onStdout?: (chunk: string) => void;
+      onStderr?: (chunk: string) => void;
+    },
+  ): Promise<{ exitCode: number | null }>;
   writeFile(path: string, content: string): Promise<void>;
   destroy(): Promise<void>;
 }
@@ -129,12 +132,12 @@ Throw `SandboxUnavailableError` (exported) from `create()` when the backend is n
 
 ```ts
 new DockerSandbox({
-  image: "node:22",        // must contain git
-  cpus: 2,                 // default 2
-  memory: "4g",            // default 4g
-  network: "bridge",       // or "none"
-  user: "1000:1000",       // default non-root
-})
+  image: "node:22", // must contain git
+  cpus: 2, // default 2
+  memory: "4g", // default 4g
+  network: "bridge", // or "none"
+  user: "1000:1000", // default non-root
+});
 ```
 
 Driven through the `docker` CLI via `child_process`. No runtime dependencies.
@@ -177,11 +180,11 @@ The agent is a command plus environment variables. The SDK ships no agent adapte
 
 ### Early termination
 
-| Cause | Result |
-| :--- | :--- |
-| `timeoutMs` reached | Agent process killed, `timed_out`. Patch is still collected for inspection, but `publishToGitHub` only accepts `changed`. |
-| `signal` aborted | Agent process killed, `failed` / `aborted`. No patch. |
-| Sandbox or clone error | `failed` with a reason and message |
+| Cause                  | Result                                                                                                                    |
+| :--------------------- | :------------------------------------------------------------------------------------------------------------------------ |
+| `timeoutMs` reached    | Agent process killed, `timed_out`. Patch is still collected for inspection, but `publishToGitHub` only accepts `changed`. |
+| `signal` aborted       | Agent process killed, `failed` / `aborted`. No patch.                                                                     |
+| Sandbox or clone error | `failed` with a reason and message                                                                                        |
 
 Expected failures are returned in the result, never thrown. `run()` only throws on programmer
 errors (invalid options), so hosts can store every run the same way. `repo.url` and `repo.ref`
@@ -200,17 +203,17 @@ starting with `-` are rejected as invalid options, because git would read them a
 ```ts
 await publishToGitHub(result, {
   repo: "owner/name",
-  token,                         // needs contents:write and pull_requests:write
-  base,                          // default result.repo.ref
-  branch,                        // default `autoforge/<task-slug>-<result.id first 8 chars>`
-  title,                         // default first line of the task, max 72 chars
-  body,                          // default task text plus a short autoforge footer
-  draft: true,                   // default true
-  author: { name, email },       // default "autoforge" <autoforge@users.noreply.github.com>
-  force: false,                  // overwrite an existing branch
-  gitUrl,                        // default https://github.com/<repo>.git (GitHub Enterprise, tests)
-  apiUrl,                        // default https://api.github.com
-  fetch,                         // optional, injectable for tests
+  token, // needs contents:write and pull_requests:write
+  base, // default result.repo.ref
+  branch, // default `autoforge/<task-slug>-<result.id first 8 chars>`
+  title, // default first line of the task, max 72 chars
+  body, // default task text plus a short autoforge footer
+  draft: true, // default true
+  author: { name, email }, // default "autoforge" <autoforge@users.noreply.github.com>
+  force: false, // overwrite an existing branch
+  gitUrl, // default https://github.com/<repo>.git (GitHub Enterprise, tests)
+  apiUrl, // default https://api.github.com
+  fetch, // optional, injectable for tests
 });
 ```
 

@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "declaration": true,
+    "skipLibCheck": true,
+    "types": ["node"],
+    "noEmit": true,
+    "paths": {
+      "autoforge": ["./src/index.ts"],
+      "autoforge/docker": ["./src/docker.ts"],
+      "autoforge/github": ["./src/github.ts"]
+    }
+  },
+  "include": ["src", "test", "examples", "vitest.config.ts"]
+}
