@@ -51,6 +51,19 @@ See `examples/basic.ts` for a complete Claude Code example.
 
 `run()` never throws for these. It only throws `TypeError` for invalid options.
 
+## Cancellation
+
+Pass `signal` (an `AbortSignal`) to `run()` to stop it at any phase, including sandbox creation
+and image pulls. An abort returns `failed` with reason `aborted`; the timeout returns
+`timed_out`. Pass `signal` to `publishToGitHub()` to stop its git commands and the API request.
+
+## Publish errors
+
+`publishToGitHub()` throws `PublishError` with a `code`: `nothing_to_publish` (the run is not
+`changed`), `invalid_result` (the result fails validation, such as a `baseSha` that is not a
+commit sha), `fetch_failed`, `apply_failed`, `branch_exists` (pass `force: true` to overwrite),
+`push_failed`, `github_api_error` (the branch was already pushed) or `aborted`.
+
 ## Security model
 
 - **The push token never enters the sandbox.** `publishToGitHub` runs on your machine and
@@ -60,7 +73,9 @@ See `examples/basic.ts` for a complete Claude Code example.
 - **publishToGitHub treats the run result as untrusted input from the sandbox:** it validates
   `baseSha` and applies the patch with git on your machine.
 - **Sandbox defaults:** no host folders mounted, non-root user, 2 CPUs, 4 GB memory, at most
-  4096 processes, network on (agents need their model API).
+  4096 processes, all Linux capabilities dropped and `no-new-privileges`, network on (agents
+  need their model API). Only `CAP_CHOWN` stays in the bounding set, for the root step that
+  hands `/workspace` to the agent user; the agent itself has no effective capabilities.
 - **Network:** the default bridge network can reach your host (`host.docker.internal` on Docker
   Desktop), your LAN and cloud metadata endpoints. Use `network: "none"` when the agent does not
   need the internet.
@@ -75,7 +90,8 @@ See `examples/basic.ts` for a complete Claude Code example.
 ## Custom sandboxes
 
 Implement `Sandbox` from `autoforge` to run sessions somewhere else (E2B, Daytona, a VM).
-Throw `SandboxUnavailableError` from `create()` when the backend is not running.
+Throw `SandboxUnavailableError` from `create()` when the backend is not running. `create()`
+receives `{ signal }`: stop and clean up when it aborts.
 
 ## Roadmap
 
