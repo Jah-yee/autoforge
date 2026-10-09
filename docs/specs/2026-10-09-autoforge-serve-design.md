@@ -256,10 +256,21 @@ If saving a finished run fails (for example the patch cannot be written), the is
 
 ### Single instance
 
-Only one daemon may use a state directory. `autoforge serve` creates `<dir>/serve.lock` with
-`O_EXCL` holding its pid before the daemon starts. If the file exists and names a live process other
-than itself, it exits with "autoforge serve is already running (pid N)."; a lock naming a dead pid is
-stale and is replaced. The lock is removed on shutdown, after the daemon stops.
+Only one daemon may use a state directory. Before the daemon starts, `autoforge serve` writes its
+pid to a temp file in the state directory and hard-links it to `<dir>/serve.lock`, so the lock never
+exists without its pid. If the lock exists:
+
+- empty or unreadable: another starter is mid-write; retry every 50 ms, and after 40 tries exit
+  asking the user to delete it if no daemon is running.
+- a live pid (or its own): exit with "autoforge serve is already running (pid N)."
+- a dead pid: stale. Rename it aside (only one starter can), check the moved file still holds that
+  dead pid, delete it and retry. If it holds another pid, a racer's fresh lock was moved: link it
+  back and retry, which then refuses.
+
+On shutdown, after the daemon stops, the lock is removed only if it still holds the daemon's pid.
+As a backstop, the daemon reads the lock after every poll; if it no longer holds its pid it logs
+"lost serve.lock; another instance took over", stops the status server and the daemon, and exits 1.
+A pid reused after a reboot makes a dead daemon's lock look live; delete `serve.lock` by hand.
 
 ## 6. State
 

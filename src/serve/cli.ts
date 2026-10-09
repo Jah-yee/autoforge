@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { realpathSync } from "node:fs";
-import { readFile, rm, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -10,6 +10,7 @@ import { DockerSandbox } from "../docker.js";
 import { ConfigError, loadConfig, readEnvFile, readSecrets, type Config } from "./config.js";
 import { Daemon, type RunSummary } from "./daemon.js";
 import { LinearClient } from "./linear.js";
+import { lockHeld, releaseLock, takeLock } from "./lock.js";
 import { installService, uninstallService } from "./service.js";
 import { startStatusServer } from "./status.js";
 
@@ -77,34 +78,9 @@ async function serve(dir: string, io: CliIo): Promise<number> {
     return 1;
   }
   try {
-    return await run(dir, io, config, env, linearApiKey);
+    return await run(dir, io, config, env, linearApiKey, lock);
   } finally {
-    await rm(lock, { force: true });
-  }
-}
-
-/** One daemon per state dir. Returns the pid of a live holder, or null once the lock is ours. */
-async function takeLock(path: string): Promise<number | null> {
-  for (;;) {
-    try {
-      await writeFile(path, String(process.pid), { flag: "wx", mode: 0o600 });
-      return null;
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
-    }
-    const pid = Number(await readFile(path, "utf8").catch(() => ""));
-    if (pid > 0 && pid !== process.pid && alive(pid)) return pid;
-    // ponytail: stale-lock takeover can race a second starter; the O_EXCL retry settles it.
-    await rm(path, { force: true });
-  }
-}
-
-function alive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (e) {
-    return (e as NodeJS.ErrnoException).code === "EPERM"; // exists, owned by someone else
+    await releaseLock(lock);
   }
 }
 
@@ -114,6 +90,7 @@ async function run(
   config: Config,
   env: Record<string, string | undefined>,
   linearApiKey: string,
+  lock: string,
 ): Promise<number> {
   const log = (entry: object) =>
     io.out(JSON.stringify({ time: new Date().toISOString(), ...entry }));
@@ -138,9 +115,20 @@ async function run(
     event: "started",
     message: `polling Linear every ${config.pollSeconds} s; status on 127.0.0.1:${server.port}`,
   });
+  let code = 0;
   try {
     while (!stop.signal.aborted) {
       await daemon.tick();
+      // Backstop for the lock's leftover races: never keep running beside another daemon.
+      if (!(await lockHeld(lock))) {
+        log({
+          level: "error",
+          event: "lock_lost",
+          message: "lost serve.lock; another instance took over",
+        });
+        code = 1;
+        break;
+      }
       await sleep(daemon.nextDelayMs(), undefined, { signal: stop.signal }).catch(() => {});
     }
   } finally {
@@ -151,7 +139,7 @@ async function run(
     await daemon.stop();
   }
   log({ level: "info", event: "stopped", message: "autoforge serve stopped" });
-  return 0;
+  return code;
 }
 
 async function status(dir: string, io: CliIo): Promise<number> {

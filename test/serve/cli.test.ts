@@ -222,6 +222,27 @@ describe("autoforge cli", () => {
     expect(existsSync(join(d, "serve.lock"))).toBe(false);
   });
 
+  it("serve stops with an error when another instance takes its lock", async () => {
+    const d = await withConfig();
+    const fetch = (async (_url: string | URL | Request, init: RequestInit = {}) => {
+      const { query } = JSON.parse(String(init.body)) as { query: string };
+      if (query.includes("viewer")) return gql({ viewer: { id: "u1", name: "Me" } });
+      await writeFile(join(d, "serve.lock"), String(process.ppid)); // someone else's now
+      return gql({ issues: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } });
+    }) as typeof globalThis.fetch;
+    const t = capture({ fetch, env: { LINEAR_API_KEY: "k", GITHUB_TOKEN: "g" } });
+    expect(await main(["serve", "--dir", d], t.io)).toBe(1);
+    const events = t.out.map((l) => JSON.parse(l) as { level: string; message: string });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        level: "error",
+        message: "lost serve.lock; another instance took over",
+      }),
+    );
+    expect(existsSync(join(d, "status.json"))).toBe(false);
+    expect(await readFile(join(d, "serve.lock"), "utf8")).toBe(String(process.ppid));
+  });
+
   it("serve releases the lock when the daemon fails to start", async () => {
     const d = await withConfig();
     const fetch = (async () => new Response("nope", { status: 500 })) as typeof globalThis.fetch;
