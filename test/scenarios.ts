@@ -103,6 +103,13 @@ export function runScenarios(ctx: ScenarioContext): void {
     expect(r.patch).toContain("+changed");
   });
 
+  it("writes a/ and b/ prefixes even when the agent set diff.noprefix", async () => {
+    const r = await run(options(ctx, "noprefix"));
+    expect(r.status).toBe("changed");
+    expect(r.patch).toContain(`--- a/${ctx.target}`);
+    expect(r.patch).toContain(`+++ b/${ctx.target}`);
+  });
+
   it("lists file names exactly, without git's quoting", async () => {
     const r = await run(options(ctx, "unicode-name"));
     expect(r.filesChanged).toEqual(["naïve file.txt"]);
