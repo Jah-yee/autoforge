@@ -110,13 +110,38 @@ describe("publishToGitHub", () => {
     await expect(publishToGitHub(changed, opts({ branch: "-x" }))).rejects.toThrow(TypeError);
   });
 
-  it("never leaks the token into error messages", async () => {
-    await publishToGitHub(changed, opts({ branch: "autoforge/fixed-tok" }));
-    const err = await publishToGitHub(changed, opts({ branch: "autoforge/fixed-tok" })).catch(
+  it("never leaks the token into git failure messages", async () => {
+    const err = await publishToGitHub(changed, opts({ gitUrl: "/nonexistent/repo.git" })).catch(
       (e: unknown) => e,
     );
-    expect(err).toMatchObject({ code: "branch_exists" });
-    expect(String((err as Error).message)).not.toContain("tkn-123456");
-    expect(String((err as Error).stack)).not.toContain("tkn-123456");
+    expect(err).toMatchObject({ code: "fetch_failed" });
+    const b64 = Buffer.from("x-access-token:tkn-123456").toString("base64");
+    for (const text of [String((err as Error).message), String((err as Error).stack)]) {
+      expect(text).not.toContain("tkn-123456");
+      expect(text).not.toContain(b64);
+    }
+  });
+
+  it("rejects a baseSha that is not a commit sha without touching GitHub", async () => {
+    const { fetch, calls } = stubFetch();
+    await expect(
+      publishToGitHub(
+        { ...changed, baseSha: "--upload-pack=touch /tmp/autoforge-pwned" },
+        opts({ fetch }),
+      ),
+    ).rejects.toThrow(TypeError);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("wraps network failures after the push as github_api_error", async () => {
+    const fetch = (async () => {
+      throw new Error("ECONNRESET");
+    }) as typeof globalThis.fetch;
+    await expect(
+      publishToGitHub(changed, opts({ branch: "autoforge/net", fetch })),
+    ).rejects.toMatchObject({
+      code: "github_api_error",
+      message: expect.stringContaining("was pushed"),
+    });
   });
 });

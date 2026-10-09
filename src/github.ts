@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { proc } from "./proc.js";
+import { makeRedactor } from "./redact.js";
 import type { RunResult } from "./run.js";
 
 export type PublishErrorCode =
@@ -53,6 +54,9 @@ export async function publishToGitHub(
       `run status is "${result.status}"; only "changed" runs can be published`,
     );
   }
+  if (!/^[0-9a-f]{40}([0-9a-f]{24})?$/.test(result.baseSha)) {
+    throw new TypeError("result.baseSha is not a commit sha");
+  }
   const firstLine = result.task.split("\n")[0]?.trim() ?? "";
   const branch = o.branch ?? `autoforge/${slug(firstLine)}-${result.id.slice(0, 8)}`;
   if (branch.startsWith("-") || !/^[\w./-]+$/.test(branch)) {
@@ -64,7 +68,9 @@ export async function publishToGitHub(
   const base = o.base ?? result.repo.ref;
   const apiUrl = o.apiUrl ?? "https://api.github.com";
   const doFetch = o.fetch ?? fetch;
-  const header = `Authorization: Basic ${Buffer.from(`x-access-token:${o.token}`).toString("base64")}`;
+  const basic = Buffer.from(`x-access-token:${o.token}`).toString("base64");
+  const header = `Authorization: Basic ${basic}`;
+  const redact = makeRedactor([o.token, basic]);
 
   const dir = await mkdtemp(join(tmpdir(), "autoforge-publish-"));
   const cwd = join(dir, "repo");
@@ -81,7 +87,7 @@ export async function publishToGitHub(
   const git = async (code: PublishErrorCode, ...args: string[]) => {
     const r = await proc("git", args, { cwd, env });
     if (r.exitCode !== 0) {
-      throw new PublishError(code, `git ${args.join(" ")} failed: ${r.stderr.trim()}`);
+      throw new PublishError(code, `git ${args.join(" ")} failed: ${redact(r.stderr.trim())}`);
     }
     return r.stdout.trim();
   };
@@ -137,24 +143,36 @@ export async function publishToGitHub(
       `HEAD:refs/heads/${branch}`,
     );
 
-    const res = await doFetch(`${apiUrl}/repos/${o.repo}/pulls`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${o.token}`,
-        Accept: "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ title, head: branch, base, body, draft: o.draft ?? true }),
-    });
-    if (!res.ok) {
-      throw new PublishError(
+    const pushed = (detail: string) =>
+      new PublishError(
         "github_api_error",
-        `GitHub API returned ${res.status} (branch ${branch} was pushed): ${await res.text()}`,
+        redact(`GitHub API request failed (branch ${branch} was pushed): ${detail}`),
       );
+    let res: Response;
+    try {
+      res = await doFetch(`${apiUrl}/repos/${o.repo}/pulls`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${o.token}`,
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ title, head: branch, base, body, draft: o.draft ?? true }),
+      });
+    } catch (e) {
+      throw pushed(e instanceof Error ? e.message : String(e));
     }
-    const pr = (await res.json()) as { html_url: string };
-    return { prUrl: pr.html_url, branch, commitSha };
+    const text = await res.text().catch(() => "");
+    if (!res.ok) throw pushed(`status ${res.status}: ${text}`);
+    let prUrl: unknown;
+    try {
+      prUrl = (JSON.parse(text) as { html_url?: unknown }).html_url;
+    } catch {
+      throw pushed(`status ${res.status} with a non-JSON body`);
+    }
+    if (typeof prUrl !== "string") throw pushed(`status ${res.status} without html_url`);
+    return { prUrl, branch, commitSha };
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
