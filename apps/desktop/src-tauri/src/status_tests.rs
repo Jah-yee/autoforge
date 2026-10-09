@@ -288,6 +288,20 @@ fn the_timeout_bounds_the_whole_request_not_each_read() {
 }
 
 #[test]
+fn the_connect_is_inside_the_timeout() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    // A zero budget is spent before the connect starts, so even a listening port times out.
+    assert_eq!(
+        fetch_runs(port, "t", Duration::ZERO),
+        AppState::Unreachable {
+            reason: "timed out".into()
+        }
+    );
+    drop(listener);
+}
+
+#[test]
 fn accepts_a_status_line_without_a_reason_phrase() {
     let (port, _server) = serve_once("HTTP/1.1 200\r\n\r\n[]");
     assert_eq!(

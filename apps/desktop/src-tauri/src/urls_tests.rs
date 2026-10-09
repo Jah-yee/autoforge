@@ -24,6 +24,10 @@ fn rejects_other_schemes_hosts_and_look_alikes() {
         "https://github.com:8443/o/r",
         "https://gist.github.com/o/1",
         "https://GITHUB.COM.evil.com/",
+        "data:text/html,x",
+        "JAVASCRIPT:alert(1)",
+        "https://github.com./o",
+        "https://xn--gthub-n4a.com/",
         "not a url",
         "",
     ] {
@@ -36,5 +40,14 @@ fn normalises_host_case() {
     assert_eq!(
         allowed("https://GitHub.com/o/r").as_deref(),
         Some("https://github.com/o/r")
+    );
+}
+
+#[test]
+fn a_backslash_before_the_at_sign_stays_in_the_path() {
+    // WHATWG parsing reads a backslash as "/" in https URLs, so "@evil.com" is a path.
+    assert_eq!(
+        allowed("https://github.com\\@evil.com").as_deref(),
+        Some("https://github.com/@evil.com")
     );
 }

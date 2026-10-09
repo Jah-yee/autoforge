@@ -5,6 +5,8 @@ use tauri::Url;
 pub fn allowed(raw: &str) -> Option<String> {
     let url = Url::parse(raw).ok()?;
     let host_ok = matches!(url.host_str(), Some("linear.app" | "github.com"));
+    // An explicit default port (https://github.com:443/) is elided by the url crate, so port()
+    // is None and the link is accepted, normalised without it.
     let plain = url.username().is_empty() && url.password().is_none() && url.port().is_none();
     (url.scheme() == "https" && host_ok && plain).then(|| url.to_string())
 }

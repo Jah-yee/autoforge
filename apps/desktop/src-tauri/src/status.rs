@@ -146,9 +146,11 @@ pub fn fetch_runs(port: u16, token: &str, timeout: Duration) -> AppState {
 }
 
 fn get_runs(port: u16, token: &str, timeout: Duration) -> io::Result<(u16, Vec<u8>)> {
-    let mut conn = TcpStream::connect_timeout(&SocketAddr::from(([127, 0, 0, 1], port)), timeout)?;
-    // The timeout bounds the whole request: each read and write gets what is left of it.
+    // The timeout bounds the whole request: the connect, each write and each read get what is
+    // left of it.
     let deadline = Instant::now() + timeout;
+    let addr = SocketAddr::from(([127, 0, 0, 1], port));
+    let mut conn = TcpStream::connect_timeout(&addr, remaining(deadline)?)?;
     conn.set_write_timeout(Some(remaining(deadline)?))?;
     // HTTP/1.0: the reply is not chunked and ends when the server closes the connection.
     // No Origin header: the daemon refuses every request that has one.
