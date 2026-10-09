@@ -241,8 +241,9 @@ export async function run(options: RunOptions): Promise<RunResult> {
   emit({ type: "phase", phase: "creating_sandbox" });
   let session: SandboxSession;
   try {
-    session = await sandbox.create();
+    session = await sandbox.create({ signal });
   } catch (e) {
+    if (signal.aborted) return stopped();
     const reason = e instanceof SandboxUnavailableError ? "sandbox_unavailable" : "sandbox_error";
     return fail(reason, errorMessage(e));
   }
