@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { chmod, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -228,18 +228,17 @@ describe("autoforge cli", () => {
     expect(existsSync(join(d, "serve.lock"))).toBe(false);
   });
 
-  it("serve stops with an error when another instance takes its lock", async () => {
+  it("serve checks the lock before every tick, including the first", async () => {
     const d = await withConfig();
-    const theirs = JSON.stringify({ port: 1, token: "t", pid: process.ppid });
-    const fetch = (async (_url: string | URL | Request, init: RequestInit = {}) => {
-      const { query } = JSON.parse(String(init.body)) as { query: string };
-      if (query.includes("viewer")) return gql({ viewer: { id: "u1", name: "Me" } });
-      await writeFile(join(d, "serve.lock"), String(process.ppid)); // someone else's now
-      await writeFile(join(d, "status.json"), theirs);
-      return gql({ issues: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } });
+    let calls = 0;
+    const fetch = (async () => {
+      calls++;
+      await writeFile(join(d, "serve.lock"), String(process.ppid)); // taken during start()
+      return gql({ viewer: { id: "u1", name: "Me" } });
     }) as typeof globalThis.fetch;
     const t = capture({ fetch, env: { LINEAR_API_KEY: "k", GITHUB_TOKEN: "g" } });
     expect(await main(["serve", "--dir", d], t.io)).toBe(1);
+    expect(calls).toBe(1); // the viewer query in start(), and no tick
     const events = t.out.map((l) => JSON.parse(l) as { level: string; message: string });
     expect(events).toContainEqual(
       expect.objectContaining({
@@ -247,8 +246,45 @@ describe("autoforge cli", () => {
         message: "lost serve.lock; another instance took over",
       }),
     );
-    expect(await readFile(join(d, "status.json"), "utf8")).toBe(theirs);
+    expect(existsSync(join(d, "status.json"))).toBe(false); // ours, removed on close
     expect(await readFile(join(d, "serve.lock"), "utf8")).toBe(String(process.ppid));
+  });
+
+  it("serve exits cleanly on a signal during the settle delay", async () => {
+    const d = await withConfig();
+    let calls = 0;
+    const fetch = (async () => {
+      calls++;
+      return gql({ viewer: { id: "u1", name: "Me" } });
+    }) as typeof globalThis.fetch;
+    const stop = new AbortController();
+    const t = capture({
+      fetch,
+      signal: stop.signal,
+      settleMs: 5_000,
+      env: { LINEAR_API_KEY: "k", GITHUB_TOKEN: "g" },
+    });
+    const serving = main(["serve", "--dir", d], t.io);
+    const lock = join(d, "serve.lock");
+    while (!existsSync(lock)) await new Promise((r) => setTimeout(r, 5));
+    stop.abort();
+    expect(await serving).toBe(0);
+    expect(calls).toBe(0);
+    expect(existsSync(lock)).toBe(false);
+    expect(existsSync(join(d, "state.json"))).toBe(false);
+  });
+
+  it("serve explains a lock that vanished during the settle delay", async () => {
+    const d = await withConfig();
+    const t = capture({ settleMs: 300, env: { LINEAR_API_KEY: "k", GITHUB_TOKEN: "g" } });
+    const serving = main(["serve", "--dir", d], t.io);
+    const lock = join(d, "serve.lock");
+    while (!existsSync(lock)) await new Promise((r) => setTimeout(r, 5));
+    await rm(lock);
+    expect(await serving).toBe(1);
+    expect(t.err).toEqual([
+      "autoforge serve could not keep serve.lock (another instance started at the same time).",
+    ]);
   });
 
   it("serve re-checks the lock after a settle delay and backs off before touching state", async () => {

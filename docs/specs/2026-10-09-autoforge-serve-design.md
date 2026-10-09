@@ -269,7 +269,9 @@ this way is never empty. If the lock exists:
   racer's fresh lock was moved: link it back and retry, which then refuses.
 
 After taking the lock, serve waits 250 ms and reads it again before touching any state; if it no
-longer holds its pid (a racer displaced it), it exits with the "already running" message. Each loop
+longer holds its pid (a racer displaced it), it exits with the "already running" message, or with
+"autoforge serve could not keep serve.lock (another instance started at the same time)." if the
+lock is gone. A signal during that wait exits cleanly and releases the lock. Each loop
 iteration checks the lock again before polling; if it no longer holds the daemon's pid, the daemon
 logs "lost serve.lock; another instance took over", stops the status server and the daemon, and
 exits 1. On shutdown the lock is removed only if it still holds the daemon's pid, and `status.json`

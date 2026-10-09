@@ -74,23 +74,39 @@ async function serve(dir: string, io: CliIo): Promise<number> {
   const config = await loadConfig(dir);
   const { linearApiKey } = readSecrets(config, env);
   const lock = join(dir, "serve.lock");
-  let holder: number | string | null = await takeLock(lock);
-  if (holder === null) {
-    // A starter that read the old dead pid can still move our fresh lock aside and, if a third
-    // starter links meanwhile, fail to put it back. Let such races land before touching state.
-    // ponytail: a starter stalled mid-takeover for longer than settleMs can still displace us
-    // later; the loop check then stops us after at most one tick. Airtight needs a kernel lock
-    // (flock), which Node does not expose.
-    await sleep(io.settleMs ?? 250);
-    if (!(await lockHeld(lock))) holder = (await readPid(lock)) || "unknown";
-  }
+  const holder = await takeLock(lock);
   if (holder !== null) {
     io.err(`autoforge serve is already running (pid ${holder}).`);
     return 1;
   }
+  const stop = new AbortController();
+  const onSignal = () => stop.abort();
+  process.once("SIGINT", onSignal);
+  process.once("SIGTERM", onSignal);
+  if (io.signal?.aborted) onSignal();
+  io.signal?.addEventListener("abort", onSignal, { once: true });
   try {
-    return await run(dir, io, config, env, linearApiKey, lock);
+    // A starter that read the old dead pid can still move our fresh lock aside and, if a third
+    // starter links meanwhile, fail to put it back. Let such races land before touching state.
+    // ponytail: a starter stalled mid-takeover for longer than settleMs can still displace us
+    // later; the loop check then stops us before the next tick. Airtight needs a kernel lock
+    // (flock), which Node does not expose.
+    await sleep(io.settleMs ?? 250, undefined, { signal: stop.signal }).catch(() => {});
+    if (stop.signal.aborted) return 0;
+    if (!(await lockHeld(lock))) {
+      const pid = await readPid(lock);
+      io.err(
+        pid
+          ? `autoforge serve is already running (pid ${pid}).`
+          : "autoforge serve could not keep serve.lock (another instance started at the same time).",
+      );
+      return 1;
+    }
+    return await run(dir, io, config, env, linearApiKey, lock, stop.signal);
   } finally {
+    process.off("SIGINT", onSignal);
+    process.off("SIGTERM", onSignal);
+    io.signal?.removeEventListener("abort", onSignal);
     await releaseLock(lock);
   }
 }
@@ -102,6 +118,7 @@ async function run(
   env: Record<string, string | undefined>,
   linearApiKey: string,
   lock: string,
+  signal: AbortSignal,
 ): Promise<number> {
   const log = (entry: object) =>
     io.out(JSON.stringify({ time: new Date().toISOString(), ...entry }));
@@ -115,12 +132,6 @@ async function run(
   });
   await daemon.start();
   const server = await startStatusServer(daemon, dir);
-  const stop = new AbortController();
-  const onSignal = () => stop.abort();
-  process.once("SIGINT", onSignal);
-  process.once("SIGTERM", onSignal);
-  if (io.signal?.aborted) onSignal();
-  io.signal?.addEventListener("abort", onSignal, { once: true });
   log({
     level: "info",
     event: "started",
@@ -128,9 +139,8 @@ async function run(
   });
   let code = 0;
   try {
-    while (!stop.signal.aborted) {
-      await daemon.tick();
-      // Backstop for the lock's leftover races: never keep running beside another daemon.
+    while (!signal.aborted) {
+      // Backstop for the lock's leftover races: no tick starts without a fresh ownership check.
       if (!(await lockHeld(lock))) {
         log({
           level: "error",
@@ -140,11 +150,10 @@ async function run(
         code = 1;
         break;
       }
-      await sleep(daemon.nextDelayMs(), undefined, { signal: stop.signal }).catch(() => {});
+      await daemon.tick();
+      await sleep(daemon.nextDelayMs(), undefined, { signal }).catch(() => {});
     }
   } finally {
-    process.off("SIGINT", onSignal);
-    process.off("SIGTERM", onSignal);
     // Close the status server first so no HTTP command lands mid-shutdown.
     await server.close();
     await daemon.stop();

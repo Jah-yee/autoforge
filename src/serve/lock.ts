@@ -81,7 +81,7 @@ export async function takeLock(path: string, o: LockOptions = {}): Promise<numbe
   }
 }
 
-/** True while the lock names `pid`. Serve checks it every poll and stops when it is false. */
+/** True while the lock names `pid`. Serve checks it before every poll and stops when it is false. */
 export async function lockHeld(path: string, pid = process.pid): Promise<boolean> {
   return (await readPid(path)) === pid;
 }
