@@ -72,6 +72,13 @@ export function runScenarios(ctx: ScenarioContext): void {
     expect(r.patch).toContain("+second line ü");
   });
 
+  it("keeps $ sequences in the task literal in {task}", async () => {
+    const task = "price $$5 and $& and $' end";
+    const agent = { command: fakeAgent("argv", "{task}"), env: { TARGET_FILE: ctx.target } };
+    const r = await run(options(ctx, "argv", { task, agent }));
+    expect(r.patch).toContain("+price $$5 and $& and $' end");
+  });
+
   it("emits phases in order and streams log lines", async () => {
     const events: RunEvent[] = [];
     await run(options(ctx, "echo-env", { onEvent: (e) => events.push(e) }));

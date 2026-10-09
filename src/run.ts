@@ -122,7 +122,7 @@ export async function run(options: RunOptions): Promise<RunResult> {
     await s.writeFile(`${w}/.git/info/exclude`, ".autoforge/\n");
 
     emit({ type: "phase", phase: "running" });
-    const command = agent.command.map((arg) => arg.replaceAll("{task}", task));
+    const command = agent.command.map((arg) => arg.replaceAll("{task}", () => task));
     const agentRun = await exec(command, {
       cwd: w,
       env: { ...agent.env, AUTOFORGE_TASK: task, AUTOFORGE_TASK_FILE: taskFile },
