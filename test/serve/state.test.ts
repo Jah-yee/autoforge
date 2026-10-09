@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -69,6 +69,20 @@ describe("state", () => {
     expect(corruptPath).toBe(join(d, "state.json.corrupt-2026-10-09T12-00-00-000Z"));
     expect(await readFile(corruptPath ?? "", "utf8")).toBe(text);
     expect(await readdir(d)).toEqual(["state.json.corrupt-2026-10-09T12-00-00-000Z"]);
+  });
+
+  it("rejects, and does not move the file aside, when state.json cannot be read", async () => {
+    const d = await dir();
+    await mkdir(join(d, "state.json"));
+    await expect(loadState(d, now)).rejects.toThrow();
+    expect(await readdir(d)).toEqual(["state.json"]);
+  });
+
+  it("leaves only the final patch file in the patches directory", async () => {
+    const d = await dir();
+    await writePatch(d, "run-2", "diff --git a/y b/y\n");
+    expect(await readdir(join(d, "patches"))).toEqual(["run-2.patch"]);
+    expect(await readPatch(d, "run-2")).toBe("diff --git a/y b/y\n");
   });
 
   it("stores patches with mode 600, reads and deletes them", async () => {

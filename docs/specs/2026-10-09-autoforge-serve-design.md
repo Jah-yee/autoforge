@@ -271,8 +271,9 @@ type IssueEntry = {
 - Patches: `~/.autoforge/patches/<runId>.patch`, mode `600`. Logs: tail kept only in memory and in
   the daemon log.
 - `state.json` contains no secrets.
-- Unreadable or invalid state: renamed to `state.json.corrupt-<timestamp>`, a fresh state is
-  started, and an error is logged. Re-picked issues do not re-run commands, because commands are
+- Invalid state (unparseable or wrong shape): renamed to `state.json.corrupt-<timestamp>`, a
+  fresh state is started, and an error is logged. Any other read error stops the daemon, and the
+  service manager restarts it. Re-picked issues do not re-run commands, because commands are
   only accepted after the latest daemon result comment, and a fresh run posts a new one.
 
 ## 7. Status endpoint (`status.ts`)

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, open, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { RunResult } from "../run.js";
 
@@ -95,11 +95,12 @@ export async function loadState(
   now: Date,
 ): Promise<{ state: State; corruptPath?: string }> {
   const path = join(dir, "state.json");
-  let text = "";
+  let text: string;
   try {
     text = await readFile(path, "utf8");
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "ENOENT") return { state: freshState(now) };
+    throw e;
   }
   try {
     const parsed: unknown = JSON.parse(text);
@@ -112,14 +113,13 @@ export async function loadState(
   return { state: freshState(now), corruptPath };
 }
 
-/** Write to a temp file in the same directory, fsync, rename. */
-export async function saveState(dir: string, state: State): Promise<void> {
-  const path = join(dir, "state.json");
+/** Write to a temp file in the same directory with mode 600, fsync, rename. */
+async function writeFileAtomic(path: string, text: string): Promise<void> {
   const tmp = `${path}.${randomUUID()}.tmp`;
   try {
     const fh = await open(tmp, "w", 0o600);
     try {
-      await fh.writeFile(JSON.stringify(state, null, 2));
+      await fh.writeFile(text);
       await fh.sync();
     } finally {
       await fh.close();
@@ -131,6 +131,10 @@ export async function saveState(dir: string, state: State): Promise<void> {
   }
 }
 
+export async function saveState(dir: string, state: State): Promise<void> {
+  await writeFileAtomic(join(dir, "state.json"), JSON.stringify(state, null, 2));
+}
+
 function patchPath(dir: string, runId: string): string {
   if (!/^[\w-]+$/.test(runId)) throw new Error(`invalid run id: ${runId}`);
   return join(dir, "patches", `${runId}.patch`);
@@ -139,7 +143,7 @@ function patchPath(dir: string, runId: string): string {
 export async function writePatch(dir: string, runId: string, patch: string): Promise<void> {
   const file = patchPath(dir, runId);
   await mkdir(join(dir, "patches"), { recursive: true, mode: 0o700 });
-  await writeFile(file, patch, { mode: 0o600 });
+  await writeFileAtomic(file, patch);
 }
 
 export async function readPatch(dir: string, runId: string): Promise<string | null> {
