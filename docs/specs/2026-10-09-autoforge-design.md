@@ -12,11 +12,11 @@ model API keys. There is no autoforge server or account.
 
 The project ships in slices. Each slice gets its own spec, plan and implementation.
 
-| Slice | What it is | Status |
-| :--- | :--- | :--- |
-| 1 | `autoforge` TypeScript SDK: run an agent in a local sandbox, return a diff, optionally publish it as a GitHub PR | this spec |
-| 2 | `autoforge serve`: a local CLI daemon built on the SDK. Polls Linear for issues assigned to the user, runs them, posts progress back, opens the PR (optional terminal approval first), links it on the issue | next spec |
-| later | Jira poller, persistent sandboxes, menu-bar UI, multi-step missions, GitLab | not planned yet |
+| Slice | What it is                                                                                                                                                                                                   | Status          |
+| :---- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :-------------- |
+| 1     | `autoforge` TypeScript SDK: run an agent in a local sandbox, return a diff, optionally publish it as a GitHub PR                                                                                             | this spec       |
+| 2     | `autoforge serve`: a local CLI daemon built on the SDK. Polls Linear for issues assigned to the user, runs them, posts progress back, opens the PR (optional terminal approval first), links it on the issue | next spec       |
+| later | Jira poller, persistent sandboxes, menu-bar UI, multi-step missions, GitLab                                                                                                                                  | not planned yet |
 
 ### Success criteria for slice 1
 
@@ -28,16 +28,16 @@ The project ships in slices. Each slice gets its own spec, plan and implementati
 
 ### Decisions already made
 
-| Decision | Choice |
-| :--- | :--- |
-| Form | Embeddable library (SDK) that any dev tool can import |
-| Language | TypeScript, ESM only, Node 22+ |
-| Sandbox | Pluggable `Sandbox` interface; Docker implementation ships first |
-| Agent | Bring your own: the host supplies a command. No agent adapters ship |
-| Output | Plain serializable result; separate opt-in GitHub publisher |
-| Approval | Two stateless calls. Approval is the host deciding whether to call `publishToGitHub` |
-| Licence | MIT |
-| Hosting | Local repo at `~/dev/autoforge`; GitHub remote on the owner's personal account, created only when the owner says so |
+| Decision | Choice                                                                                                              |
+| :------- | :------------------------------------------------------------------------------------------------------------------ |
+| Form     | Embeddable library (SDK) that any dev tool can import                                                               |
+| Language | TypeScript, ESM only, Node 22+                                                                                      |
+| Sandbox  | Pluggable `Sandbox` interface; Docker implementation ships first                                                    |
+| Agent    | Bring your own: the host supplies a command. No agent adapters ship                                                 |
+| Output   | Plain serializable result; separate opt-in GitHub publisher                                                         |
+| Approval | Two stateless calls. Approval is the host deciding whether to call `publishToGitHub`                                |
+| Licence  | MIT                                                                                                                 |
+| Hosting  | Local repo at `~/dev/autoforge`; GitHub remote on the owner's personal account, created only when the owner says so |
 
 ## 2. Package layout and public API
 
@@ -74,18 +74,24 @@ Plain JSON. Safe to store in any database or file.
 
 ```ts
 type RunResult = {
-  id: string;                        // random, used for branch names
+  id: string; // random, used for branch names
   status: "changed" | "no_changes" | "failed" | "timed_out";
-  reason?: "aborted" | "clone_failed" | "sandbox_unavailable" | "sandbox_error" | "patch_too_large";
-  message?: string;                  // human-readable detail when failed
-  repo: { url: string; ref: string };  // never contains the token
+  reason?:
+    | "aborted"
+    | "clone_failed"
+    | "sandbox_unavailable"
+    | "sandbox_error"
+    | "patch_too_large"
+    | "unsupported_encoding";
+  message?: string; // human-readable detail when failed
+  repo: { url: string; ref: string }; // never contains the token
   task: string;
-  baseSha?: string;                  // absent if the clone failed
-  patch: string;                     // empty unless status is "changed"
+  baseSha?: string; // absent if the clone failed
+  patch: string; // the diff; also kept on "timed_out" for inspection; empty otherwise
   filesChanged: string[];
-  logs: string;                      // redacted, tail-truncated
-  exitCode: number | null;           // null if the agent never ran or was killed
-  startedAt: string;                 // ISO 8601
+  logs: string; // redacted, tail-truncated
+  exitCode: number | null; // null if the agent never ran or was killed
+  startedAt: string; // ISO 8601
   durationMs: number;
 };
 ```
@@ -95,7 +101,7 @@ type RunResult = {
 ```ts
 type RunEvent =
   | { type: "phase"; phase: "creating_sandbox" | "cloning" | "running" | "collecting" | "done" }
-  | { type: "log"; stream: "stdout" | "stderr"; line: string };   // redacted
+  | { type: "log"; stream: "stdout" | "stderr"; line: string }; // redacted
 ```
 
 ### `Sandbox` interface
@@ -108,14 +114,17 @@ interface Sandbox {
 }
 
 interface SandboxSession {
-  readonly workdir: string;      // where the repo is cloned; "/workspace" for Docker
-  exec(cmd: string[], opts: {
-    cwd?: string;
-    env?: Record<string, string>;
-    signal?: AbortSignal;
-    onStdout?: (chunk: string) => void;
-    onStderr?: (chunk: string) => void;
-  }): Promise<{ exitCode: number | null }>;
+  readonly workdir: string; // where the repo is cloned; "/workspace" for Docker
+  exec(
+    cmd: string[],
+    opts: {
+      cwd?: string;
+      env?: Record<string, string>;
+      signal?: AbortSignal;
+      onStdout?: (chunk: string) => void;
+      onStderr?: (chunk: string) => void;
+    },
+  ): Promise<{ exitCode: number | null }>;
   writeFile(path: string, content: string): Promise<void>;
   destroy(): Promise<void>;
 }
@@ -129,17 +138,18 @@ Throw `SandboxUnavailableError` (exported) from `create()` when the backend is n
 
 ```ts
 new DockerSandbox({
-  image: "node:22",        // must contain git
-  cpus: 2,                 // default 2
-  memory: "4g",            // default 4g
-  network: "bridge",       // or "none"
-  user: "1000:1000",       // default non-root
-})
+  image: "node:22", // must contain git
+  cpus: 2, // default 2
+  memory: "4g", // default 4g
+  network: "bridge", // or "none"
+  user: "1000:1000", // default non-root
+});
 ```
 
 Driven through the `docker` CLI via `child_process`. No runtime dependencies.
 One container per run: `docker run -d` with `sleep infinity`, `docker exec` for each command,
-`docker rm -f` on destroy. No host folders are mounted.
+`docker rm -f` on destroy. No host folders are mounted. Every container also gets
+`--pids-limit 4096` (fixed, not an option) so a fork bomb cannot exhaust the host.
 
 ### Agent
 
@@ -153,9 +163,10 @@ The agent is a command plus environment variables. The SDK ships no agent adapte
 1. **Create the sandbox.** If Docker is not available, return `failed` / `sandbox_unavailable`
    with a message telling the user to start Docker.
 2. **Clone and check out.** Clone `repo.url` into `/workspace`, check out `repo.ref`, record
-   `baseSha = git rev-parse HEAD`. If `repo.token` is set, it is passed to the clone through
-   an `http.extraHeader` on the command line (`git -c http.extraHeader=...`), so it is
-   never written to `.git/config` and never visible to the agent. Clone failure returns
+   `baseSha = git rev-parse HEAD`. If `repo.token` is set, the auth header is passed to git
+   through the `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_0`/`GIT_CONFIG_VALUE_0` environment variables
+   on the clone command only, so it never appears in a process list, is never written to
+   `.git/config`, and is never visible to the agent. Clone failure returns
    `failed` / `clone_failed`.
 3. **Write the task.** Write the task to `/workspace/.autoforge/task.md` and add `.autoforge/`
    to `/workspace/.git/info/exclude` so it never appears in the diff.
@@ -167,21 +178,28 @@ The agent is a command plus environment variables. The SDK ships no agent adapte
      `AUTOFORGE_TASK_FILE` (`/workspace/.autoforge/task.md`).
    - stdout and stderr are split into lines, redacted, emitted as `log` events, and appended
      to the log buffer.
-5. **Collect.** Run `git add -A` then `git diff --cached --binary <baseSha>` inside the sandbox.
-   This captures the agent's work whether it committed or not.
+5. **Collect.** Run `git add -A` then `git diff --cached --binary --no-ext-diff --no-textconv
+<baseSha>` inside the sandbox. This captures the agent's work whether it committed or not.
+   - The agent owns `.git/config`, so every collect command runs as
+     `git -c core.fsmonitor=false -c core.hooksPath=/dev/null ...` and both diffs pass
+     `--no-ext-diff --no-textconv`; nothing in the repo config can run a command.
+   - Collect has its own deadline: the time left on the run, capped at 5 minutes, at least
+     the smaller of the run timeout and 30 seconds. If it fires: `failed` / `sandbox_error` ("collecting the changes timed out").
    - Empty diff: `no_changes`.
    - Non-empty diff: `changed`, even if the agent exited non-zero. `exitCode` lets the host judge.
    - Diff larger than `maxPatchBytes`: `failed` / `patch_too_large`, patch emptied.
-   - `filesChanged` comes from `git diff --cached --name-only <baseSha>`.
+   - Diff containing U+FFFD (text that was not UTF-8): `failed` / `unsupported_encoding`, patch
+     emptied. A file that really contains U+FFFD is a known false positive.
+   - `filesChanged` comes from `git diff --cached --name-only -z <baseSha>`, split on NUL.
 6. **Destroy the sandbox.**
 
 ### Early termination
 
-| Cause | Result |
-| :--- | :--- |
-| `timeoutMs` reached | Agent process killed, `timed_out`. Patch is still collected for inspection, but `publishToGitHub` only accepts `changed`. |
-| `signal` aborted | Agent process killed, `failed` / `aborted`. No patch. |
-| Sandbox or clone error | `failed` with a reason and message |
+| Cause                  | Result                                                                                                                    |
+| :--------------------- | :------------------------------------------------------------------------------------------------------------------------ |
+| `timeoutMs` reached    | Agent process killed, `timed_out`. Patch is still collected for inspection, but `publishToGitHub` only accepts `changed`. |
+| `signal` aborted       | Agent process killed, `failed` / `aborted`. No patch.                                                                     |
+| Sandbox or clone error | `failed` with a reason and message                                                                                        |
 
 Expected failures are returned in the result, never thrown. `run()` only throws on programmer
 errors (invalid options), so hosts can store every run the same way. `repo.url` and `repo.ref`
@@ -200,25 +218,27 @@ starting with `-` are rejected as invalid options, because git would read them a
 ```ts
 await publishToGitHub(result, {
   repo: "owner/name",
-  token,                         // needs contents:write and pull_requests:write
-  base,                          // default result.repo.ref
-  branch,                        // default `autoforge/<task-slug>-<result.id first 8 chars>`
-  title,                         // default first line of the task, max 72 chars
-  body,                          // default task text plus a short autoforge footer
-  draft: true,                   // default true
-  author: { name, email },       // default "autoforge" <autoforge@users.noreply.github.com>
-  force: false,                  // overwrite an existing branch
-  gitUrl,                        // default https://github.com/<repo>.git (GitHub Enterprise, tests)
-  apiUrl,                        // default https://api.github.com
-  fetch,                         // optional, injectable for tests
+  token, // needs contents:write and pull_requests:write
+  base, // default result.repo.ref
+  branch, // default `autoforge/<task-slug>-<result.id first 8 chars>`
+  title, // default first line of the task, max 72 chars
+  body, // default task text plus a short autoforge footer
+  draft: true, // default true
+  author: { name, email }, // default "autoforge" <autoforge@users.noreply.github.com>
+  force: false, // overwrite an existing branch
+  gitUrl, // default https://github.com/<repo>.git (GitHub Enterprise, tests)
+  apiUrl, // default https://api.github.com
+  fetch, // optional, injectable for tests
 });
 ```
 
 Runs on the host, not in the sandbox:
 
 1. Refuse unless `result.status === "changed"` (throws `PublishError` code `nothing_to_publish`).
-2. Create a temp dir, `git init`, fetch `result.baseSha` from the repo using the token through
-   `http.extraHeader`, check it out.
+   1b. Reject a `baseSha` that is not a 40 or 64 character hex sha (the result comes from the sandbox and is untrusted).
+2. Create a temp dir, `git init`, fetch `result.baseSha` from the repo with the token passed to
+   git through the `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_0`/`GIT_CONFIG_VALUE_0` environment
+   variables, check it out.
 3. `git apply --binary` the patch, commit as `author`.
 4. Push to `branch`. If the branch exists and `force` is false, throw `PublishError` code
    `branch_exists`.
@@ -238,12 +258,17 @@ action.
   difference from Factory, where the agent itself opens the PR.
 - **The clone token** is never written to disk inside the sandbox. For private repos, recommend
   a read-only fine-grained token.
-- **Sandbox defaults:** no host mounts, non-root user, 2 CPU and 4 GB memory, network on
-  (agents need their model API), `network: "none"` available.
+- **Sandbox defaults:** no host mounts, non-root user, 2 CPU, 4 GB memory, 4096 processes,
+  network on (agents need their model API), `network: "none"` available. The bridge network
+  can reach the host (`host.docker.internal` on Docker Desktop), the LAN and cloud metadata
+  endpoints; recommend `network: "none"` when the agent does not need the internet.
 - **Known limit:** the agent sees the API keys passed in `agent.env` and has network access, so
   a malicious task could try to exfiltrate them. The sandbox protects the user's machine and
-  repo credentials, not the model key. Guidance: use scoped or spend-limited keys, review
-  every PR. The decision to publish is the main safety gate.
+  repo credentials, not the model key. Guidance: use scoped or spend-limited keys.
+- **Review the patch before publishing.** Pushing a branch can trigger `on: push` CI with repo
+  secrets on agent-written code before anyone reviews a PR. A push token without the
+  `workflows` permission cannot push `.github/workflows` changes. The decision to publish is
+  the main safety gate.
 
 ## 5. Testing
 
