@@ -309,3 +309,87 @@ fn reads_the_status_code_from_the_first_line_of_an_http_reply_only() {
         );
     }
 }
+
+fn run_with(status: &str) -> Run {
+    Run {
+        issue_id: format!("id-{status}"),
+        identifier: "ENG-1".into(),
+        status: status.into(),
+        repo: "o/r".into(),
+        git_ref: "main".into(),
+        queued_at: "2026-10-09T12:00:00.000Z".into(),
+        updated_at: "2026-10-09T12:00:00.000Z".into(),
+        pr_url: None,
+        issue_url: None,
+    }
+}
+
+fn ok(statuses: &[&str]) -> Snapshot {
+    Snapshot {
+        state: AppState::Ok {
+            runs: statuses.iter().map(|s| run_with(s)).collect(),
+        },
+        last_ok_at: Some(1),
+    }
+}
+
+#[test]
+fn badge_counts_runs_awaiting_approval_and_hides_at_zero() {
+    let snap = ok(&[
+        "awaiting_approval",
+        "awaiting_approval",
+        "running",
+        "published",
+    ]);
+    assert_eq!(snap.badge().as_deref(), Some("2"));
+    assert_eq!(ok(&["running", "queued"]).badge(), None);
+    assert_eq!(ok(&[]).badge(), None);
+}
+
+#[test]
+fn badge_warns_only_after_the_daemon_was_reachable_once() {
+    for state in [
+        AppState::DaemonNotRunning,
+        AppState::Unauthorized,
+        AppState::Unreachable {
+            reason: "timed out".into(),
+        },
+    ] {
+        let fresh = Snapshot {
+            state: state.clone(),
+            last_ok_at: None,
+        };
+        assert_eq!(fresh.badge(), None, "{state:?}");
+        let lost = Snapshot {
+            state: state.clone(),
+            last_ok_at: Some(1),
+        };
+        assert_eq!(lost.badge().as_deref(), Some("!"), "{state:?}");
+    }
+}
+
+#[test]
+fn tooltip_summarises_the_state() {
+    let busy = ok(&[
+        "awaiting_approval",
+        "awaiting_approval",
+        "running",
+        "publishing",
+        "queued",
+    ]);
+    assert_eq!(
+        busy.tooltip(),
+        "autoforge: 2 awaiting approval, 2 running, 1 queued"
+    );
+    assert_eq!(ok(&["published"]).tooltip(), "autoforge: nothing waiting");
+    let down = Snapshot {
+        state: AppState::DaemonNotRunning,
+        last_ok_at: None,
+    };
+    assert_eq!(down.tooltip(), "autoforge: serve isn't running");
+    let lost = Snapshot {
+        state: AppState::Unauthorized,
+        last_ok_at: None,
+    };
+    assert_eq!(lost.tooltip(), "autoforge: can't reach the daemon");
+}

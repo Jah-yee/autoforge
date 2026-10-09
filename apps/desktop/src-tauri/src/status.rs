@@ -47,6 +47,55 @@ pub struct Snapshot {
     pub last_ok_at: Option<u64>,
 }
 
+impl Snapshot {
+    /// Tray badge: the number of runs awaiting approval, hidden at 0. "!" when the daemon is gone,
+    /// but only after it was reachable once since the app started (no warning on a fresh install).
+    pub fn badge(&self) -> Option<String> {
+        match &self.state {
+            AppState::Ok { runs } => {
+                let n = runs
+                    .iter()
+                    .filter(|r| r.status == "awaiting_approval")
+                    .count();
+                (n > 0).then(|| n.to_string())
+            }
+            _ => self.last_ok_at.map(|_| "!".into()),
+        }
+    }
+
+    /// Tray tooltip, also the tray's accessible name, for example "autoforge: 2 awaiting approval".
+    pub fn tooltip(&self) -> String {
+        let summary = match &self.state {
+            AppState::DaemonNotRunning => "serve isn't running".into(),
+            AppState::Unreachable { .. } | AppState::Unauthorized => {
+                "can't reach the daemon".into()
+            }
+            AppState::Ok { runs } => {
+                let count = |statuses: &[&str]| {
+                    runs.iter()
+                        .filter(|r| statuses.contains(&r.status.as_str()))
+                        .count()
+                };
+                let parts: Vec<String> = [
+                    (count(&["awaiting_approval"]), "awaiting approval"),
+                    (count(&["running", "publishing"]), "running"),
+                    (count(&["queued"]), "queued"),
+                ]
+                .into_iter()
+                .filter(|(n, _)| *n > 0)
+                .map(|(n, label)| format!("{n} {label}"))
+                .collect();
+                if parts.is_empty() {
+                    "nothing waiting".into()
+                } else {
+                    parts.join(", ")
+                }
+            }
+        };
+        format!("autoforge: {summary}")
+    }
+}
+
 /// `<state dir>/status.json`, written by `autoforge serve` with mode 600.
 #[derive(Deserialize)]
 pub struct StatusInfo {
