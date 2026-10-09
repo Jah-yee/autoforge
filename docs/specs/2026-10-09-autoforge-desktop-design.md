@@ -116,6 +116,11 @@ the last update ("3 min ago"), and "PR #N" when `prUrl` exists. Awaiting rows ad
 
 ### Badge and tooltip
 
+Platform reality: macOS and Linux show the count as the tray title next to the icon; Windows trays
+have no title, so on Windows the count is in the tooltip until a drawn badge icon is designed.
+Linux trays do not report clicks, so the tray also has a native menu (Open autoforge, Quit) on
+every platform.
+
 - Badge: count of awaiting-approval runs; hidden at 0.
 - Warning indicator when the daemon is not running or unreachable, but only after it was reachable
   at least once since the app started (no warnings on a fresh install).
@@ -134,11 +139,14 @@ reduced-motion.
 ## 4. Security
 
 - The token is read and used only in Rust; it is never sent to the webview.
-- Tauri capabilities: the event channel to the popover window, the URL opener (with the allowlist
-  above), autostart, single instance. No file-system, shell or HTTP permissions for the webview.
-- Content security policy: bundled assets only, no remote scripts, no `connect-src`.
+- Tauri capabilities: the webview gets only the event channel and the app's own commands. Opening
+  URLs and autostart run in Rust behind those commands, so the webview gets no plugin, file-system,
+  shell or HTTP permissions.
+- Content security policy: bundled assets only, no remote scripts. `connect-src` allows only
+  Tauri's IPC (`ipc: http://ipc.localhost`), never a network origin.
 - v1 never calls the endpoint's `POST` routes.
-- URLs from the daemon are treated as untrusted and checked against the allowlist before opening.
+- URLs from the daemon are treated as untrusted. The allowlist parses the URL and requires scheme
+  `https`, host exactly `linear.app` or `github.com`, no userinfo and no port.
 
 ## 5. Testing
 
