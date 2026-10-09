@@ -56,20 +56,20 @@
 
 ## File map
 
-| File                               | Responsibility                                                          |
-| :--------------------------------- | :---------------------------------------------------------------------- |
-| `src/serve/config.ts`              | Parse and validate `config.json`; secrets from env; env file mode check |
-| `src/serve/linear.ts`              | Linear types, the `LinearApi` interface, `LinearClient` over `fetch`    |
-| `src/serve/route.ts`               | Pure: issue to `{ repo, ref, agent }` or `null`                         |
-| `src/serve/prompt.ts`              | Pure: `MARKER`, `parseCommand`, `renderTask`                            |
-| `src/serve/state.ts`               | State types, atomic load/save, corrupt-state handling, patch files      |
-| `src/serve/daemon.ts`              | `Daemon`: poll, pickup, queue, runs, commands, lifecycle                |
-| `src/serve/status.ts`              | Localhost status endpoint                                               |
-| `src/serve/service.ts`             | launchd plist / systemd unit rendering, install, uninstall              |
-| `src/serve/cli.ts`                 | `autoforge serve`, `status`, `service install`, `service uninstall`     |
-| `test/serve/fake-linear.ts`        | In-memory `LinearApi` for daemon tests                                  |
-| `test/serve/harness.ts`            | Daemon test setup: clock, bare repo, stub GitHub, temp state dir        |
-| `test/serve/*.test.ts`             | One test file per unit; daemon split into core, commands, lifecycle     |
+| File                        | Responsibility                                                          |
+| :-------------------------- | :---------------------------------------------------------------------- |
+| `src/serve/config.ts`       | Parse and validate `config.json`; secrets from env; env file mode check |
+| `src/serve/linear.ts`       | Linear types, the `LinearApi` interface, `LinearClient` over `fetch`    |
+| `src/serve/route.ts`        | Pure: issue to `{ repo, ref, agent }` or `null`                         |
+| `src/serve/prompt.ts`       | Pure: `MARKER`, `parseCommand`, `renderTask`                            |
+| `src/serve/state.ts`        | State types, atomic load/save, corrupt-state handling, patch files      |
+| `src/serve/daemon.ts`       | `Daemon`: poll, pickup, queue, runs, commands, lifecycle                |
+| `src/serve/status.ts`       | Localhost status endpoint                                               |
+| `src/serve/service.ts`      | launchd plist / systemd unit rendering, install, uninstall              |
+| `src/serve/cli.ts`          | `autoforge serve`, `status`, `service install`, `service uninstall`     |
+| `test/serve/fake-linear.ts` | In-memory `LinearApi` for daemon tests                                  |
+| `test/serve/harness.ts`     | Daemon test setup: clock, bare repo, stub GitHub, temp state dir        |
+| `test/serve/*.test.ts`      | One test file per unit; daemon split into core, commands, lifecycle     |
 
 ---
 
@@ -188,7 +188,11 @@ describe("parseConfig", () => {
       { agent: { image: "i", command: ["x"], envFrom: ["NOT-A-NAME"] } },
       "config.agent.envFrom",
     ],
-    ["zero timeout", { agent: { ...minimal.agent, timeoutMinutes: 0 } }, "config.agent.timeoutMinutes"],
+    [
+      "zero timeout",
+      { agent: { ...minimal.agent, timeoutMinutes: 0 } },
+      "config.agent.timeoutMinutes",
+    ],
     ["rules not a list", { ...minimal, rules: {} }, "config.rules"],
     [
       "rule with both matchers",
@@ -279,7 +283,7 @@ describe("files", () => {
 
   it("reads an env file with mode 600", async () => {
     const d = await dir();
-    await writeFile(join(d, "env"), "LINEAR_API_KEY=lin\n# comment\nGITHUB_TOKEN=\"gh\"\n");
+    await writeFile(join(d, "env"), 'LINEAR_API_KEY=lin\n# comment\nGITHUB_TOKEN="gh"\n');
     await chmod(join(d, "env"), 0o600);
     expect(await readEnvFile(d)).toMatchObject({ LINEAR_API_KEY: "lin", GITHUB_TOKEN: "gh" });
   });
@@ -395,7 +399,12 @@ function onlyKeys(o: Obj, allowed: string[], path: string): void {
 
 function num(o: Obj, key: string, path: string, def: number, min: number, integer = true): number {
   const v = o[key] ?? def;
-  if (typeof v !== "number" || !Number.isFinite(v) || v < min || (integer && !Number.isInteger(v))) {
+  if (
+    typeof v !== "number" ||
+    !Number.isFinite(v) ||
+    v < min ||
+    (integer && !Number.isInteger(v))
+  ) {
     fail(`${path}.${key} must be ${integer ? "an integer" : "a number"} of at least ${min}`);
   }
   return v;
@@ -448,7 +457,15 @@ function parseAgent(v: unknown, path: string, partial: boolean): Partial<AgentCo
     out.command = strings(v, "command", path, "a list of at least one string", 1);
   }
   if (has("envFrom")) {
-    out.envFrom = strings(v, "envFrom", path, "a list of environment variable names", 0, ENV_NAME, []);
+    out.envFrom = strings(
+      v,
+      "envFrom",
+      path,
+      "a list of environment variable names",
+      0,
+      ENV_NAME,
+      [],
+    );
   }
   if (has("timeoutMinutes")) out.timeoutMinutes = num(v, "timeoutMinutes", path, 30, 1, false);
   return out;
@@ -531,7 +548,8 @@ export async function readEnvFile(dir: string): Promise<Record<string, string | 
     if ((e as NodeJS.ErrnoException).code === "ENOENT") return {};
     throw e;
   }
-  if (mode & 0o077) fail(`${path} must be readable and writable only by you. Run: chmod 600 ${path}`);
+  if (mode & 0o077)
+    fail(`${path} must be readable and writable only by you. Run: chmod 600 ${path}`);
   return parseEnv(await readFile(path, "utf8"));
 }
 ```
@@ -619,15 +637,45 @@ const docs = { id: "p-docs", name: "Docs" };
 const eng = { id: "t-eng", key: "ENG", name: "Engineering" };
 
 const cases: [string, Partial<LinearIssue>, string, string, string][] = [
-  ["a repo label wins over rules", { labels: ["repo:me/label@feat/x"], project: docs, team: eng }, "me/label", "feat/x", "base"],
-  ["a repo label without a branch uses main", { labels: ["repo:me/label"] }, "me/label", "main", "base"],
-  ["an invalid repo label falls through", { labels: ["repo:not a repo"], team: eng }, "me/app", "develop", "my-agent"],
-  ["a label branch starting with - falls through", { labels: ["repo:me/x@-rf"], team: eng }, "me/app", "develop", "my-agent"],
+  [
+    "a repo label wins over rules",
+    { labels: ["repo:me/label@feat/x"], project: docs, team: eng },
+    "me/label",
+    "feat/x",
+    "base",
+  ],
+  [
+    "a repo label without a branch uses main",
+    { labels: ["repo:me/label"] },
+    "me/label",
+    "main",
+    "base",
+  ],
+  [
+    "an invalid repo label falls through",
+    { labels: ["repo:not a repo"], team: eng },
+    "me/app",
+    "develop",
+    "my-agent",
+  ],
+  [
+    "a label branch starting with - falls through",
+    { labels: ["repo:me/x@-rf"], team: eng },
+    "me/app",
+    "develop",
+    "my-agent",
+  ],
   ["project by name", { project: docs }, "me/docs", "main", "base"],
   ["project by id", { project: { id: "proj-42", name: "Forty two" } }, "me/p42", "main", "base"],
   ["a project rule beats a team rule", { project: docs, team: eng }, "me/docs", "main", "base"],
   ["team by key", { team: eng }, "me/app", "develop", "my-agent"],
-  ["team by name", { team: { id: "t-p", key: "PLT", name: "Platform" } }, "me/platform", "main", "base"],
+  [
+    "team by name",
+    { team: { id: "t-p", key: "PLT", name: "Platform" } },
+    "me/platform",
+    "main",
+    "base",
+  ],
   ["default repo", {}, "me/app", "main", "base"],
 ];
 
@@ -682,7 +730,11 @@ const issue = (fields: Partial<LinearIssue> = {}): LinearIssue => ({
   ...fields,
 });
 
-const opts = { template: "{title}\n\n{description}\n\n{comments}", comments: "all", viewerId: "me" } as const;
+const opts = {
+  template: "{title}\n\n{description}\n\n{comments}",
+  comments: "all",
+  viewerId: "me",
+} as const;
 
 describe("renderTask", () => {
   it("renders title, description and comments oldest first as author: body", () => {
@@ -729,7 +781,9 @@ describe("renderTask", () => {
   });
 
   it("appends the reviewer's feedback for a retry", () => {
-    expect(renderTask(issue(), { ...opts, template: "{title}", feedback: "Use tabs.\nAnd tests." })).toBe(
+    expect(
+      renderTask(issue(), { ...opts, template: "{title}", feedback: "Use tabs.\nAnd tests." }),
+    ).toBe(
       "Fix login\n\nFeedback from the reviewer on the previous attempt:\nUse tabs.\nAnd tests.",
     );
   });
@@ -827,7 +881,8 @@ export function routeIssue(issue: LinearIssue, config: Config): Route | null {
         (r.linearProject === project.name || r.linearProject === project.id),
     ) ??
     config.rules.find(
-      (r) => r.linearTeam !== undefined && (r.linearTeam === team.key || r.linearTeam === team.name),
+      (r) =>
+        r.linearTeam !== undefined && (r.linearTeam === team.key || r.linearTeam === team.name),
     );
   const ruleSpec = rule ? parseRepoSpec(rule.repo) : null;
   if (rule && ruleSpec) return { ...ruleSpec, agent: { ...config.agent, ...rule.agent } };
@@ -845,9 +900,7 @@ import type { LinearIssue } from "./linear.js";
 export const MARKER = "<!-- autoforge -->";
 
 export type Command =
-  | { kind: "publish"; force: boolean }
-  | { kind: "discard" }
-  | { kind: "retry"; feedback?: string };
+  { kind: "publish"; force: boolean } | { kind: "discard" } | { kind: "retry"; feedback?: string };
 
 export function parseCommand(body: string): Command | null {
   const m = /^\/(publish|discard|retry)(?:\s+([\s\S]*))?$/.exec(body.trim());
@@ -1240,7 +1293,10 @@ type Call = { url: string; headers: Headers; query: string; variables: Record<st
 function stub(...responses: (Response | Error)[]) {
   const calls: Call[] = [];
   const fetch = (async (url: string | URL | Request, init: RequestInit = {}) => {
-    const body = JSON.parse(String(init.body)) as { query: string; variables: Record<string, unknown> };
+    const body = JSON.parse(String(init.body)) as {
+      query: string;
+      variables: Record<string, unknown>;
+    };
     calls.push({ url: String(url), headers: new Headers(init.headers), ...body });
     const next = responses.shift();
     if (!next) throw new Error("unexpected request");
@@ -1309,8 +1365,18 @@ describe("LinearClient", () => {
       team: { id: "t1", key: "ENG", name: "Engineering" },
       project: { id: "p1", name: "Docs" },
       comments: [
-        { id: "c1", body: "hi", createdAt: "2026-10-09T12:00:01.000Z", user: { id: "u1", name: "Me" } },
-        { id: "c0", body: "hi", createdAt: "2026-10-09T12:00:02.000Z", user: { id: "u1", name: "Me" } },
+        {
+          id: "c1",
+          body: "hi",
+          createdAt: "2026-10-09T12:00:01.000Z",
+          user: { id: "u1", name: "Me" },
+        },
+        {
+          id: "c0",
+          body: "hi",
+          createdAt: "2026-10-09T12:00:02.000Z",
+          user: { id: "u1", name: "Me" },
+        },
       ],
     });
     expect(calls[0]?.variables).toEqual({
@@ -1770,9 +1836,14 @@ export function stubGitHub(): GitHubStub {
     status: 201,
     pulls: [],
     fetch: (async (url: string | URL | Request, init: RequestInit = {}) => {
-      gh.pulls.push({ url: String(url), body: JSON.parse(String(init.body)) as Record<string, unknown> });
+      gh.pulls.push({
+        url: String(url),
+        body: JSON.parse(String(init.body)) as Record<string, unknown>,
+      });
       const ok = gh.status < 300;
-      const body = ok ? { html_url: `https://github.com/o/r/pull/${gh.pulls.length}` } : { message: "nope" };
+      const body = ok
+        ? { html_url: `https://github.com/o/r/pull/${gh.pulls.length}` }
+        : { message: "nope" };
       return new Response(JSON.stringify(body), { status: gh.status });
     }) as typeof globalThis.fetch,
   };
@@ -1835,7 +1906,7 @@ export async function readState(dir: string): Promise<State> {
 
 `test/serve/daemon-core.test.ts`:
 
-```ts
+`````ts
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -2015,7 +2086,12 @@ describe("daemon core", () => {
     await step(d);
     expect(h.linear.said("issue-1")[2]).toContain("+***");
     for (const p of h.linear.posted) expect(p.body).not.toContain(secret);
-    expect(h.logs).toContainEqual({ level: "info", event: "agent", message: "key ***", issue: "ENG-1" });
+    expect(h.logs).toContainEqual({
+      level: "info",
+      event: "agent",
+      message: "key ***",
+      issue: "ENG-1",
+    });
     expect(JSON.stringify(h.logs)).not.toContain(secret);
     expect(await readFile(join(h.dir, "state.json"), "utf8")).not.toContain(secret);
   });
@@ -2074,7 +2150,7 @@ describe("daemon core", () => {
     expect(result).toContain("\n````\n");
   });
 });
-```
+`````
 
 - [ ] **Step 3: Run the test to verify it fails**
 
@@ -2189,7 +2265,11 @@ export class Daemon {
       } catch (e) {
         this.failures++;
         this.retryAfterMs = e instanceof LinearError ? e.retryAfterMs : undefined;
-        this.log("warn", "poll_failed", `${errorMessage(e)}; next try in ${this.nextDelayMs() / 1000} s`);
+        this.log(
+          "warn",
+          "poll_failed",
+          `${errorMessage(e)}; next try in ${this.nextDelayMs() / 1000} s`,
+        );
         return;
       }
       this.failures = 0;
@@ -2322,13 +2402,17 @@ export class Daemon {
         result = await run({
           repo: { url: this.repoUrl(route.repo), ref: route.ref, token: this.secrets.cloneToken },
           task,
-          agent: { command: route.agent.command, env: pick(this.secrets.agentEnv, route.agent.envFrom) },
+          agent: {
+            command: route.agent.command,
+            env: pick(this.secrets.agentEnv, route.agent.envFrom),
+          },
           sandbox: this.o.sandbox(route.agent),
           timeoutMs: route.agent.timeoutMinutes * 60_000,
           signal: AbortSignal.any([abort.signal, this.stopping.signal]),
           onEvent: (ev) => {
             if (ev.type === "log") this.log("info", "agent", ev.line, entry.identifier);
-            else if (ev.phase === "cloning") announced ??= this.announce(id, entry, route.repo, route.ref);
+            else if (ev.phase === "cloning")
+              announced ??= this.announce(id, entry, route.repo, route.ref);
           },
         });
       } catch (e) {
@@ -2360,7 +2444,11 @@ export class Daemon {
     if (this.stopping.signal.aborted || job.dropped) return;
     if (result instanceof Error) {
       this.set(entry, { status: "failed", interruptions: 0 });
-      await this.post(id, `autoforge could not start the run: ${result.message}\n\n${RETRY_HINT}`, true);
+      await this.post(
+        id,
+        `autoforge could not start the run: ${result.message}\n\n${RETRY_HINT}`,
+        true,
+      );
       return;
     }
     if (result.status === "changed") await writePatch(this.o.stateDir, result.id, result.patch);
@@ -2386,7 +2474,12 @@ export class Daemon {
       if (gate) this.gate(issueId, c.createdAt);
     } catch (e) {
       this.state.outbox.push({ issueId, body, gate, attempts: 1 });
-      this.log("warn", "comment_failed", `${errorMessage(e)}; will retry`, this.state.issues[issueId]?.identifier);
+      this.log(
+        "warn",
+        "comment_failed",
+        `${errorMessage(e)}; will retry`,
+        this.state.issues[issueId]?.identifier,
+      );
     }
   }
 
@@ -2423,7 +2516,12 @@ export class Daemon {
   }
 
   private log(level: LogEntry["level"], event: string, message: string, issue?: string): void {
-    (this.o.log ?? defaultLog)({ level, event, message: this.mask(message), ...(issue ? { issue } : {}) });
+    (this.o.log ?? defaultLog)({
+      level,
+      event,
+      message: this.mask(message),
+      ...(issue ? { issue } : {}),
+    });
   }
 }
 
@@ -2490,7 +2588,8 @@ const localDate = (d: Date) =>
 
 const errorMessage = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-const defaultLog = (e: LogEntry) => console.log(JSON.stringify({ time: new Date().toISOString(), ...e }));
+const defaultLog = (e: LogEntry) =>
+  console.log(JSON.stringify({ time: new Date().toISOString(), ...e }));
 ```
 
 - [ ] **Step 5: Run the test to verify it passes**
@@ -2764,14 +2863,14 @@ const VALID_WHEN: Record<Command["kind"], string> = {
 3e. In `handleIssue`, replace the line
 
 ```ts
-    if (entry) return; // an issue already in state is never picked up twice
+if (entry) return; // an issue already in state is never picked up twice
 ```
 
 with
 
 ```ts
-    if (entry && picked && open) return this.handleComments(issue, entry);
-    if (entry) return; // an issue already in state is never picked up twice
+if (entry && picked && open) return this.handleComments(issue, entry);
+if (entry) return; // an issue already in state is never picked up twice
 ```
 
 3f. Insert these methods directly above the comment line `  /** Posts a daemon comment. A failure goes to the outbox. \`gate\` moves the command window. */`:
@@ -2985,7 +3084,9 @@ describe("daemon lifecycle", () => {
     h.clock.advance(1000);
     h.linear.update("issue-1", { assigneeId: ME.id });
     await d.tick();
-    expect(h.linear.said("issue-1").filter((s) => s === "Queued for autoforge (position 1).")).toHaveLength(2);
+    expect(
+      h.linear.said("issue-1").filter((s) => s === "Queued for autoforge (position 1)."),
+    ).toHaveLength(2);
     await d.stop();
   });
 
@@ -3005,7 +3106,9 @@ describe("daemon lifecycle", () => {
     h.clock.advance(1000);
     h.linear.update("issue-1", { labels: ["autoforge"] });
     await step(d);
-    expect(h.linear.said("issue-1").filter((s) => s === "Queued for autoforge (position 1).")).toHaveLength(2);
+    expect(
+      h.linear.said("issue-1").filter((s) => s === "Queued for autoforge (position 1)."),
+    ).toHaveLength(2);
     expect((await readState(h.dir)).issues["issue-1"]?.status).toBe("awaiting_approval");
   });
 
@@ -3036,7 +3139,8 @@ describe("daemon lifecycle", () => {
     await d.start();
     await step(d);
     await step(d);
-    const limit = "The daily run limit (1) is reached. This issue stays queued and starts tomorrow.";
+    const limit =
+      "The daily run limit (1) is reached. This issue stays queued and starts tomorrow.";
     expect(h.linear.said("issue-2")).toEqual(["Queued for autoforge (position 2).", limit]);
     await step(d);
     expect(h.linear.said("issue-2")).toHaveLength(2);
@@ -3164,46 +3268,46 @@ Expected: FAIL. Every test fails on its first lifecycle assertion, for example `
 3b. In `start()`, replace
 
 ```ts
-    const { state } = await loadState(this.o.stateDir, this.now());
-    this.state = state;
-    this.state.viewerId = (await this.o.linear.viewer()).id;
-    await this.save();
+const { state } = await loadState(this.o.stateDir, this.now());
+this.state = state;
+this.state.viewerId = (await this.o.linear.viewer()).id;
+await this.save();
 ```
 
 with
 
 ```ts
-    const { state, corruptPath } = await loadState(this.o.stateDir, this.now());
-    this.state = state;
-    if (corruptPath) {
-      this.log(
-        "error",
-        "state_corrupt",
-        `state.json was unreadable; moved it to ${corruptPath} and started fresh`,
-      );
-    }
-    this.state.viewerId = (await this.o.linear.viewer()).id;
-    await this.recover();
-    await this.save();
+const { state, corruptPath } = await loadState(this.o.stateDir, this.now());
+this.state = state;
+if (corruptPath) {
+  this.log(
+    "error",
+    "state_corrupt",
+    `state.json was unreadable; moved it to ${corruptPath} and started fresh`,
+  );
+}
+this.state.viewerId = (await this.o.linear.viewer()).id;
+await this.recover();
+await this.save();
 ```
 
 3c. In `tick()`, replace the line `      await this.schedule();` with:
 
 ```ts
-      await this.expire();
-      await this.schedule();
+await this.expire();
+await this.schedule();
 ```
 
 3d. In `handleIssue`, replace the line
 
 ```ts
-    if (entry) return; // an issue already in state is never picked up twice
+if (entry) return; // an issue already in state is never picked up twice
 ```
 
 with
 
 ```ts
-    if (entry) return this.release(issue.id, entry, picked);
+if (entry) return this.release(issue.id, entry, picked);
 ```
 
 3e. Insert these methods directly above the comment line `  /** Queued entries, oldest first. */`:
@@ -3294,28 +3398,28 @@ with
 3g. At the top of `announce()`, before the `moveToStarted` call, add:
 
 ```ts
-    this.dockerDown = false;
-    entry.waiting = undefined;
+this.dockerDown = false;
+entry.waiting = undefined;
 ```
 
 3h. In `finishRun()`, directly after the closing brace of the `if (result instanceof Error) { ... }` block, add:
 
 ```ts
-    if (result.reason === "sandbox_unavailable") {
-      this.dockerDown = true;
-      this.state.dailyRuns.count = Math.max(0, this.state.dailyRuns.count - 1);
-      this.set(entry, { status: "queued" });
-      this.log("warn", "docker_unavailable", result.message ?? "", entry.identifier);
-      for (const [qid, q] of this.queue()) {
-        if (q.waiting === "docker") continue;
-        q.waiting = "docker";
-        await this.post(
-          qid,
-          "Waiting for Docker: it is not running. The run starts by itself once Docker is back.",
-        );
-      }
-      return;
-    }
+if (result.reason === "sandbox_unavailable") {
+  this.dockerDown = true;
+  this.state.dailyRuns.count = Math.max(0, this.state.dailyRuns.count - 1);
+  this.set(entry, { status: "queued" });
+  this.log("warn", "docker_unavailable", result.message ?? "", entry.identifier);
+  for (const [qid, q] of this.queue()) {
+    if (q.waiting === "docker") continue;
+    q.waiting = "docker";
+    await this.post(
+      qid,
+      "Waiting for Docker: it is not running. The run starts by itself once Docker is back.",
+    );
+  }
+  return;
+}
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
@@ -3424,9 +3528,12 @@ describe("status endpoint", () => {
   it("answers 401 without the right token and 403 to any request with an Origin", async () => {
     const h = await running();
     expect((await call(h.port, "/runs")).status).toBe(401);
-    expect((await call(h.port, "/runs", { headers: { Authorization: "Bearer nope" } })).status).toBe(401);
     expect(
-      (await call(h.port, "/runs", { headers: { ...h.auth, Origin: "https://evil.example" } })).status,
+      (await call(h.port, "/runs", { headers: { Authorization: "Bearer nope" } })).status,
+    ).toBe(401);
+    expect(
+      (await call(h.port, "/runs", { headers: { ...h.auth, Origin: "https://evil.example" } }))
+        .status,
     ).toBe(403);
   });
 
@@ -3458,7 +3565,10 @@ describe("status endpoint", () => {
     await h.d.idle();
     expect(h.linear.said("issue-1").at(-1)).toBe("Draft PR opened: https://github.com/o/r/pull/1");
 
-    const discard = await call(h.port, "/runs/issue-1/discard", { method: "POST", headers: h.auth });
+    const discard = await call(h.port, "/runs/issue-1/discard", {
+      method: "POST",
+      headers: h.auth,
+    });
     expect(discard.status).toBe(409);
     expect(JSON.parse(discard.body)).toEqual({
       ok: false,
@@ -3575,7 +3685,8 @@ export async function startStatusServer(
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     // Browsers always send Origin on cross-site requests; nothing legitimate here does.
-    if (req.headers.origin !== undefined) return send(res, 403, { error: "browser requests are refused" });
+    if (req.headers.origin !== undefined)
+      return send(res, 403, { error: "browser requests are refused" });
     const auth = Buffer.from(req.headers.authorization ?? "");
     if (auth.length !== expected.length || !timingSafeEqual(auth, expected)) {
       return send(res, 401, { error: "missing or wrong token (see status.json)" });
@@ -3585,7 +3696,9 @@ export async function startStatusServer(
     if (!m) return send(res, 404, { error: "not found" });
     const [, rawId, action] = m;
     if (!rawId || !action) {
-      return req.method === "GET" ? send(res, 200, daemon.runs()) : send(res, 405, { error: "use GET" });
+      return req.method === "GET"
+        ? send(res, 200, daemon.runs())
+        : send(res, 405, { error: "use GET" });
     }
     const issueId = decodeURIComponent(rawId);
     if (action === "patch") {
@@ -3769,16 +3882,19 @@ describe("installService", () => {
     const file = await installService({ ...mac, home, platform: "darwin", uid: 501, run });
     expect(file).toBe(join(home, "Library", "LaunchAgents", "dev.autoforge.serve.plist"));
     expect(await readFile(file, "utf8")).toBe(launchdPlist({ ...mac, home }));
-    expect(calls).toEqual([`launchctl bootout gui/501 ${file}`, `launchctl bootstrap gui/501 ${file}`]);
+    expect(calls).toEqual([
+      `launchctl bootout gui/501 ${file}`,
+      `launchctl bootstrap gui/501 ${file}`,
+    ]);
     expect((await stat(join(home, ".autoforge"))).isDirectory()).toBe(true);
   });
 
   it("fails with launchctl's message when bootstrap fails", async () => {
     const home = await mkdtemp(join(tmpdir(), "autoforge-home-"));
     const { run } = recorder("launchctl bootstrap");
-    await expect(installService({ ...mac, home, platform: "darwin", uid: 501, run })).rejects.toThrow(
-      "Bootstrap failed: 5: Input/output error",
-    );
+    await expect(
+      installService({ ...mac, home, platform: "darwin", uid: 501, run }),
+    ).rejects.toThrow("Bootstrap failed: 5: Input/output error");
   });
 
   it("installs on Linux with systemctl --user", async () => {
@@ -3793,26 +3909,31 @@ describe("installService", () => {
     ]);
   });
 
-  it.each(["darwin", "linux"] as const)("uninstalls on %s without touching ~/.autoforge data", async (platform) => {
-    const home = await mkdtemp(join(tmpdir(), "autoforge-home-"));
-    await mkdir(join(home, ".autoforge"));
-    await writeFile(join(home, ".autoforge", "state.json"), "{}");
-    const { calls, run } = recorder();
-    const o = { ...linux, home, platform, uid: 1000, run };
-    const file = await installService(o);
-    expect(await uninstallService(o)).toBe(file);
-    expect(existsSync(file)).toBe(false);
-    expect(await readFile(join(home, ".autoforge", "state.json"), "utf8")).toBe("{}");
-    expect(calls.at(-1)).toBe(
-      platform === "darwin" ? `launchctl bootout gui/1000 ${file}` : "systemctl --user daemon-reload",
-    );
-  });
+  it.each(["darwin", "linux"] as const)(
+    "uninstalls on %s without touching ~/.autoforge data",
+    async (platform) => {
+      const home = await mkdtemp(join(tmpdir(), "autoforge-home-"));
+      await mkdir(join(home, ".autoforge"));
+      await writeFile(join(home, ".autoforge", "state.json"), "{}");
+      const { calls, run } = recorder();
+      const o = { ...linux, home, platform, uid: 1000, run };
+      const file = await installService(o);
+      expect(await uninstallService(o)).toBe(file);
+      expect(existsSync(file)).toBe(false);
+      expect(await readFile(join(home, ".autoforge", "state.json"), "utf8")).toBe("{}");
+      expect(calls.at(-1)).toBe(
+        platform === "darwin"
+          ? `launchctl bootout gui/1000 ${file}`
+          : "systemctl --user daemon-reload",
+      );
+    },
+  );
 
   it("refuses other platforms", async () => {
     const { run } = recorder();
-    await expect(
-      installService({ ...linux, platform: "win32", uid: 0, run }),
-    ).rejects.toThrow("autoforge service supports macOS and Linux, not win32");
+    await expect(installService({ ...linux, platform: "win32", uid: 0, run })).rejects.toThrow(
+      "autoforge service supports macOS and Linux, not win32",
+    );
   });
 });
 ```
@@ -3843,7 +3964,11 @@ export type ServiceTarget = {
 
 export type Runner = (cmd: string, args: string[]) => Promise<ProcResult>;
 
-export type ServiceOptions = ServiceTarget & { platform: NodeJS.Platform; uid: number; run?: Runner };
+export type ServiceOptions = ServiceTarget & {
+  platform: NodeJS.Platform;
+  uid: number;
+  run?: Runner;
+};
 
 const LABEL = "dev.autoforge.serve";
 const UNIT = "autoforge.service";
@@ -4062,12 +4187,16 @@ describe("autoforge cli", () => {
     const d = await withConfig();
     const t = capture({ env: { GITHUB_TOKEN: "g" } });
     expect(await main(["serve", "--dir", d], t.io)).toBe(1);
-    expect(t.err[0]).toBe("LINEAR_API_KEY is not set. Put it in ~/.autoforge/env or the environment.");
+    expect(t.err[0]).toBe(
+      "LINEAR_API_KEY is not set. Put it in ~/.autoforge/env or the environment.",
+    );
   });
 
   it("serve reads the env file, polls Linear, serves status and shuts down on abort", async () => {
     const d = await withConfig();
-    await writeFile(join(d, "env"), "LINEAR_API_KEY=lin_key\nGITHUB_TOKEN=gh_key\n", { mode: 0o600 });
+    await writeFile(join(d, "env"), "LINEAR_API_KEY=lin_key\nGITHUB_TOKEN=gh_key\n", {
+      mode: 0o600,
+    });
     const stop = new AbortController();
     const auth: string[] = [];
     let statusDuringPoll = false;
@@ -4087,7 +4216,10 @@ describe("autoforge cli", () => {
     expect(existsSync(join(d, "status.json"))).toBe(false);
     const state = JSON.parse(await readFile(join(d, "state.json"), "utf8")) as { viewerId: string };
     expect(state.viewerId).toBe("u1");
-    expect(t.out.map((l) => (JSON.parse(l) as { event: string }).event)).toEqual(["started", "stopped"]);
+    expect(t.out.map((l) => (JSON.parse(l) as { event: string }).event)).toEqual([
+      "started",
+      "stopped",
+    ]);
   });
 
   it("status says when the daemon is not running", async () => {
@@ -4222,7 +4354,8 @@ async function serve(dir: string, io: CliIo): Promise<number> {
   const env = { ...(await readEnvFile(dir)), ...io.env };
   const config = await loadConfig(dir);
   const { linearApiKey } = readSecrets(config, env);
-  const log = (entry: object) => io.out(JSON.stringify({ time: new Date().toISOString(), ...entry }));
+  const log = (entry: object) =>
+    io.out(JSON.stringify({ time: new Date().toISOString(), ...entry }));
   const daemon = new Daemon({
     config,
     env,
@@ -4408,12 +4541,12 @@ Assign an issue to yourself and add the `autoforge` label. autoforge comments "Q
 the issue to your team's first started state, runs it, and posts a result with the first 80
 lines of the patch. Then reply on the issue:
 
-| Reply               | Effect                                                         |
-| :------------------ | :------------------------------------------------------------- |
-| `/publish`          | Opens a draft PR and links it on the issue                     |
-| `/publish force`    | Same, overwriting an existing branch                           |
-| `/discard`          | Drops the result                                               |
-| `/retry <feedback>` | Runs again with the original task plus your feedback           |
+| Reply               | Effect                                               |
+| :------------------ | :--------------------------------------------------- |
+| `/publish`          | Opens a draft PR and links it on the issue           |
+| `/publish force`    | Same, overwriting an existing branch                 |
+| `/discard`          | Drops the result                                     |
+| `/retry <feedback>` | Runs again with the original task plus your feedback |
 
 Only your own comments count as commands. Results nobody answers are discarded after
 `approvalExpiryDays`. To start an issue over, remove the label and add it again.
@@ -4474,12 +4607,14 @@ against a real Linear test team and a throwaway repo before merge:
 ## Manual end-to-end checklist (real Linear test team, throwaway repo)
 
 Setup
+
 - [ ] Throwaway repo `<you>/autoforge-e2e` with a README; `docker build -t autoforge-claude examples`
 - [ ] `~/.autoforge/config.json` with `defaultRepo` = the throwaway repo, `pollSeconds` 10
 - [ ] `~/.autoforge/env` with LINEAR_API_KEY, GITHUB_TOKEN (fine-grained, this repo only), ANTHROPIC_API_KEY
 - [ ] `chmod 644 ~/.autoforge/env`: `autoforge serve` refuses with the chmod hint; back to 600
 
 Happy path
+
 - [ ] `autoforge serve` logs `started`
 - [ ] New issue "Fix a typo in README", assigned to me, label `autoforge`: "Queued (position 1)", issue moves to the first started state, "Running on ...", result with the patch excerpt
 - [ ] Issue with a `repo:<you>/autoforge-e2e@main` label routes there
@@ -4489,11 +4624,13 @@ Happy path
 - [ ] I reply `/publish` again: one-line wrong-state reply
 
 Linear API assumptions (unverified by unit tests)
+
 - [ ] The `or` filter with `id: { in: [...] }` is accepted, and an issue unassigned while queued is dropped with a comment
 - [ ] A new comment is seen within one poll on an issue with more than a few comments (`comments(first: 100)` order)
 - [ ] `attachmentCreate` shows the PR link on the issue
 
 Lifecycle
+
 - [ ] New issue, `/discard`: "Discarded"; remove and re-add the label: starts over
 - [ ] Unassign an issue while it runs: "stopped the run", no result comment
 - [ ] Quit Docker, label an issue: one "Waiting for Docker" comment; start Docker: it runs
@@ -4501,6 +4638,7 @@ Lifecycle
 - [ ] `dailyRunLimit` 1 with two issues: the second waits with one comment
 
 Status and service
+
 - [ ] `autoforge status` lists the issues
 - [ ] `curl http://127.0.0.1:<port>/runs` without the token: 401; with `-H "Origin: x"`: 403
 - [ ] `autoforge service install`: daemon runs under launchd (or `systemctl --user status autoforge`), `daemon.log` fills, docker is found

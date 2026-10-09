@@ -24,34 +24,34 @@ then opens a draft PR and links it on the issue.
 
 ### Decisions already made
 
-| Decision | Choice |
-| :--- | :--- |
-| Approval | Commands in Linear comments: `/publish`, `/publish force`, `/discard`, `/retry <feedback>` |
-| Who may approve | Only the Linear user who owns the API key (`viewer`) |
-| Pickup | Assigned to the user AND labelled `autoforge` (configurable to all assigned issues) |
-| Repo routing | Label `repo:owner/name[@branch]`, then project rule, then team rule, then default repo |
-| Task text | Config template over `{title}`, `{description}`, `{comments}` |
-| Iteration | `/retry <feedback>` starts a fresh run with the original task plus the feedback |
-| Concurrency | 1 run at a time (`maxConcurrent`), FIFO queue |
-| Runtime | Foreground CLI plus `autoforge service install` (launchd on macOS, systemd user unit on Linux) |
-| State | Atomic JSON file plus patch files under `~/.autoforge/` |
-| Menu-bar app | Out of scope; slice 3, built on the local status endpoint defined here |
+| Decision        | Choice                                                                                         |
+| :-------------- | :--------------------------------------------------------------------------------------------- |
+| Approval        | Commands in Linear comments: `/publish`, `/publish force`, `/discard`, `/retry <feedback>`     |
+| Who may approve | Only the Linear user who owns the API key (`viewer`)                                           |
+| Pickup          | Assigned to the user AND labelled `autoforge` (configurable to all assigned issues)            |
+| Repo routing    | Label `repo:owner/name[@branch]`, then project rule, then team rule, then default repo         |
+| Task text       | Config template over `{title}`, `{description}`, `{comments}`                                  |
+| Iteration       | `/retry <feedback>` starts a fresh run with the original task plus the feedback                |
+| Concurrency     | 1 run at a time (`maxConcurrent`), FIFO queue                                                  |
+| Runtime         | Foreground CLI plus `autoforge service install` (launchd on macOS, systemd user unit on Linux) |
+| State           | Atomic JSON file plus patch files under `~/.autoforge/`                                        |
+| Menu-bar app    | Out of scope; slice 3, built on the local status endpoint defined here                         |
 
 ## 2. Components
 
 All new code lives in `src/serve/`. Each unit has one job.
 
-| Unit | Job |
-| :--- | :--- |
-| `config.ts` | Load and validate `~/.autoforge/config.json`; read secrets from the environment |
-| `linear.ts` | Thin Linear GraphQL client over `fetch` implementing the `LinearApi` interface |
-| `route.ts` | Pure: issue to `{ repo, ref, agent }` or "no match" |
-| `prompt.ts` | Pure: render the task template from the issue |
-| `state.ts` | Atomic JSON state and patch files |
-| `daemon.ts` | Poll loop, queue, worker, command handling; exposes `tick()` |
-| `status.ts` | Localhost status endpoint for the future menu-bar app |
-| `service.ts` | Render and install the launchd plist or systemd user unit |
-| `cli.ts` | `autoforge serve`, `autoforge status`, `autoforge service install`, `autoforge service uninstall` |
+| Unit         | Job                                                                                               |
+| :----------- | :------------------------------------------------------------------------------------------------ |
+| `config.ts`  | Load and validate `~/.autoforge/config.json`; read secrets from the environment                   |
+| `linear.ts`  | Thin Linear GraphQL client over `fetch` implementing the `LinearApi` interface                    |
+| `route.ts`   | Pure: issue to `{ repo, ref, agent }` or "no match"                                               |
+| `prompt.ts`  | Pure: render the task template from the issue                                                     |
+| `state.ts`   | Atomic JSON state and patch files                                                                 |
+| `daemon.ts`  | Poll loop, queue, worker, command handling; exposes `tick()`                                      |
+| `status.ts`  | Localhost status endpoint for the future menu-bar app                                             |
+| `service.ts` | Render and install the launchd plist or systemd user unit                                         |
+| `cli.ts`     | `autoforge serve`, `autoforge status`, `autoforge service install`, `autoforge service uninstall` |
 
 `package.json` gains `"bin": { "autoforge": "./dist/serve/cli.js" }`. Argument parsing uses
 `node:util` `parseArgs`; the endpoint uses `node:http`.
@@ -67,7 +67,7 @@ interface LinearApi {
   changedIssues(since: string, trackedIds: string[]): Promise<LinearIssue[]>;
   // createdAt is Linear's clock; the command gate compares against it, never the local clock.
   comment(issueId: string, body: string): Promise<{ id: string; createdAt: string }>;
-  moveToStarted(issueId: string): Promise<void>;     // first workflow state of type "started"
+  moveToStarted(issueId: string): Promise<void>; // first workflow state of type "started"
   attachUrl(issueId: string, url: string, title: string): Promise<void>;
 }
 ```
@@ -102,19 +102,19 @@ The daemon only talks to `LinearApi`, so tests use an in-memory fake.
 }
 ```
 
-| Field | Default | Notes |
-| :--- | :--- | :--- |
-| `pollSeconds` | 30 | minimum 10 |
-| `maxConcurrent` | 1 | |
-| `dailyRunLimit` | 20 | runs started per local calendar day |
-| `approvalExpiryDays` | 14 | |
-| `pickup` | `"labelled"` | or `"all-assigned"` |
-| `label` | `"autoforge"` | pickup label name |
-| `comments` | `"all"` | or `"mine"`: which comments enter `{comments}` |
-| `defaultRepo` | none | `owner/name@branch`; `@branch` optional, default `main` |
-| `rules` | `[]` | each has exactly one of `linearProject` / `linearTeam` (name or key), a `repo`, optional `agent` override (shallow merge) |
-| `agent` | required | `image`, `command`, `envFrom` (env var names passed to the agent), `timeoutMinutes` |
-| `template` | as above | placeholders `{title}`, `{description}`, `{comments}` |
+| Field                | Default       | Notes                                                                                                                     |
+| :------------------- | :------------ | :------------------------------------------------------------------------------------------------------------------------ |
+| `pollSeconds`        | 30            | minimum 10                                                                                                                |
+| `maxConcurrent`      | 1             |                                                                                                                           |
+| `dailyRunLimit`      | 20            | runs started per local calendar day                                                                                       |
+| `approvalExpiryDays` | 14            |                                                                                                                           |
+| `pickup`             | `"labelled"`  | or `"all-assigned"`                                                                                                       |
+| `label`              | `"autoforge"` | pickup label name                                                                                                         |
+| `comments`           | `"all"`       | or `"mine"`: which comments enter `{comments}`                                                                            |
+| `defaultRepo`        | none          | `owner/name@branch`; `@branch` optional, default `main`                                                                   |
+| `rules`              | `[]`          | each has exactly one of `linearProject` / `linearTeam` (name or key), a `repo`, optional `agent` override (shallow merge) |
+| `agent`              | required      | `image`, `command`, `envFrom` (env var names passed to the agent), `timeoutMinutes`                                       |
+| `template`           | as above      | placeholders `{title}`, `{description}`, `{comments}`                                                                     |
 
 Invalid config stops the daemon at start with a message naming the field.
 
@@ -206,12 +206,12 @@ A comment is a command only when all hold:
 - its id has not been handled before (handled ids are kept in state),
 - its body, trimmed, starts with `/publish`, `/publish force`, `/discard` or `/retry`.
 
-| Command | Valid in | Effect |
-| :--- | :--- | :--- |
-| `/publish` | `awaiting_approval` | `publishToGitHub(result, { repo, token: GITHUB_TOKEN, base, signal })` |
-| `/publish force` | `awaiting_approval` | same with `force: true` |
-| `/discard` | `awaiting_approval` | state `discarded`, patch file deleted |
-| `/retry <feedback>` | `awaiting_approval`, `no_changes`, `failed`, `timed_out` | new run queued with feedback |
+| Command             | Valid in                                                 | Effect                                                                 |
+| :------------------ | :------------------------------------------------------- | :--------------------------------------------------------------------- |
+| `/publish`          | `awaiting_approval`                                      | `publishToGitHub(result, { repo, token: GITHUB_TOKEN, base, signal })` |
+| `/publish force`    | `awaiting_approval`                                      | same with `force: true`                                                |
+| `/discard`          | `awaiting_approval`                                      | state `discarded`, patch file deleted                                  |
+| `/retry <feedback>` | `awaiting_approval`, `no_changes`, `failed`, `timed_out` | new run queued with feedback                                           |
 
 A valid command in the wrong state gets a one-line reply explaining why it did nothing.
 
@@ -239,21 +239,30 @@ rename). Shape:
 type State = {
   version: 1;
   viewerId: string;
-  cursor: string;                       // ISO time; advanced only after a successful poll
+  cursor: string; // ISO time; advanced only after a successful poll
   dailyRuns: { date: string; count: number };
-  issues: Record<string, IssueEntry>;   // keyed by Linear issue id
+  issues: Record<string, IssueEntry>; // keyed by Linear issue id
 };
 
 type IssueEntry = {
-  identifier: string;                   // e.g. "ENG-123"
-  status: "queued" | "running" | "awaiting_approval" | "publishing" | "published"
-        | "no_changes" | "failed" | "timed_out" | "discarded";
-  repo: string; ref: string;
+  identifier: string; // e.g. "ENG-123"
+  status:
+    | "queued"
+    | "running"
+    | "awaiting_approval"
+    | "publishing"
+    | "published"
+    | "no_changes"
+    | "failed"
+    | "timed_out"
+    | "discarded";
+  repo: string;
+  ref: string;
   feedback?: string;
   interruptions: number;
   lastResultCommentAt?: string;
   handledCommentIds: string[];
-  run?: Omit<RunResult, "patch" | "logs">;   // from slice 1; patch stored separately
+  run?: Omit<RunResult, "patch" | "logs">; // from slice 1; patch stored separately
   prUrl?: string;
   updatedAt: string;
 };
@@ -296,15 +305,15 @@ For the future menu-bar app and `autoforge status`.
 
 ## 9. Failure handling
 
-| Failure | Behaviour |
-| :--- | :--- |
-| Linear API error, network error, rate limit | Exponential backoff (5 s doubling, max 5 min), honour `Retry-After`; cursor not advanced |
-| Docker unavailable (`sandbox_unavailable`) | Queue paused; one "waiting for Docker" comment per affected issue; retried every poll; resumes automatically |
-| Run fails / times out / no changes | Result comment with reason; `/retry` available |
-| Publish fails | Comment with the `PublishError` code and message; back to `awaiting_approval`; `branch_exists` suggests `/publish force` |
-| Daemon crash | launchd / systemd restarts it; restart rules in section 5 |
-| Corrupt state | Section 6 |
-| Invalid config or env file permissions | Refuse to start with a clear message |
+| Failure                                     | Behaviour                                                                                                                |
+| :------------------------------------------ | :----------------------------------------------------------------------------------------------------------------------- |
+| Linear API error, network error, rate limit | Exponential backoff (5 s doubling, max 5 min), honour `Retry-After`; cursor not advanced                                 |
+| Docker unavailable (`sandbox_unavailable`)  | Queue paused; one "waiting for Docker" comment per affected issue; retried every poll; resumes automatically             |
+| Run fails / times out / no changes          | Result comment with reason; `/retry` available                                                                           |
+| Publish fails                               | Comment with the `PublishError` code and message; back to `awaiting_approval`; `branch_exists` suggests `/publish force` |
+| Daemon crash                                | launchd / systemd restarts it; restart rules in section 5                                                                |
+| Corrupt state                               | Section 6                                                                                                                |
+| Invalid config or env file permissions      | Refuse to start with a clear message                                                                                     |
 
 Logs are one JSON object per line on stdout (`time`, `level`, `issue`, `event`, `message`), masked.
 The service unit redirects them to `~/.autoforge/daemon.log`.
