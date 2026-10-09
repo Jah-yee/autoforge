@@ -15,13 +15,13 @@ fn serve_once(reply: &'static str) -> (u16, JoinHandle<String>) {
         let mut request = Vec::new();
         let mut buf = [0u8; 1024];
         while !request.ends_with(b"\r\n\r\n") {
-            let n = conn.read(&mut buf).unwrap();
+            let n = conn.read(&mut buf).unwrap_or(0);
             if n == 0 {
                 break;
             }
             request.extend_from_slice(&buf[..n]);
         }
-        conn.write_all(reply.as_bytes()).unwrap();
+        let _ = conn.write_all(reply.as_bytes());
         String::from_utf8(request).unwrap()
     });
     (port, handle)
@@ -259,4 +259,53 @@ fn serialises_for_the_webview_in_camel_case() {
         serde_json::to_value(AppState::DaemonNotRunning).unwrap(),
         serde_json::json!({ "kind": "daemonNotRunning" })
     );
+}
+
+#[test]
+fn the_timeout_bounds_the_whole_request_not_each_read() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    // Answers with one byte per second, forever (until the client hangs up).
+    thread::spawn(move || {
+        let (mut conn, _) = listener.accept().unwrap();
+        while conn.write_all(b"x").is_ok() {
+            thread::sleep(Duration::from_secs(1));
+        }
+    });
+    let started = std::time::Instant::now();
+    let state = fetch_runs(port, "t", Duration::from_secs(2));
+    assert_eq!(
+        state,
+        AppState::Unreachable {
+            reason: "timed out".into()
+        }
+    );
+    assert!(
+        started.elapsed() < Duration::from_secs(4),
+        "{:?}",
+        started.elapsed()
+    );
+}
+
+#[test]
+fn accepts_a_status_line_without_a_reason_phrase() {
+    let (port, _server) = serve_once("HTTP/1.1 200\r\n\r\n[]");
+    assert_eq!(
+        fetch_runs(port, "t", Duration::from_secs(5)),
+        AppState::Ok { runs: vec![] }
+    );
+}
+
+#[test]
+fn reads_the_status_code_from_the_first_line_of_an_http_reply_only() {
+    for reply in ["NOPE 200 OK\r\n\r\n[]", "HTTP/1.1\r\nX-A: 200 b\r\n\r\n[]"] {
+        let (port, _server) = serve_once(reply);
+        assert_eq!(
+            fetch_runs(port, "t", Duration::from_secs(5)),
+            AppState::Unreachable {
+                reason: "malformed HTTP reply".into()
+            },
+            "{reply:?}"
+        );
+    }
 }

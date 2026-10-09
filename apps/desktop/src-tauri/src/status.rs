@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::io::{self, ErrorKind, Read, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::path::Path;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// How long one GET /runs may take.
 pub const TIMEOUT: Duration = Duration::from_secs(3);
@@ -96,11 +96,11 @@ pub fn fetch_runs(port: u16, token: &str, timeout: Duration) -> AppState {
     }
 }
 
-// ponytail: the timeout applies per read, so a server that trickles bytes can take longer.
 fn get_runs(port: u16, token: &str, timeout: Duration) -> io::Result<(u16, Vec<u8>)> {
     let mut conn = TcpStream::connect_timeout(&SocketAddr::from(([127, 0, 0, 1], port)), timeout)?;
-    conn.set_read_timeout(Some(timeout))?;
-    conn.set_write_timeout(Some(timeout))?;
+    // The timeout bounds the whole request: each read and write gets what is left of it.
+    let deadline = Instant::now() + timeout;
+    conn.set_write_timeout(Some(remaining(deadline)?))?;
     // HTTP/1.0: the reply is not chunked and ends when the server closes the connection.
     // No Origin header: the daemon refuses every request that has one.
     write!(
@@ -108,7 +108,16 @@ fn get_runs(port: u16, token: &str, timeout: Duration) -> io::Result<(u16, Vec<u
         "GET /runs HTTP/1.0\r\nHost: 127.0.0.1:{port}\r\nAuthorization: Bearer {token}\r\n\r\n"
     )?;
     let mut reply = Vec::new();
-    (&conn).take(MAX_REPLY_BYTES + 1).read_to_end(&mut reply)?;
+    let mut chunk = [0u8; 8192];
+    while (reply.len() as u64) <= MAX_REPLY_BYTES {
+        conn.set_read_timeout(Some(remaining(deadline)?))?;
+        match conn.read(&mut chunk) {
+            Ok(0) => break,
+            Ok(n) => reply.extend_from_slice(&chunk[..n]),
+            Err(e) if e.kind() == ErrorKind::Interrupted => {}
+            Err(e) => return Err(e),
+        }
+    }
     if reply.len() as u64 > MAX_REPLY_BYTES {
         return Err(io::Error::other("reply too large"));
     }
@@ -118,12 +127,24 @@ fn get_runs(port: u16, token: &str, timeout: Duration) -> io::Result<(u16, Vec<u
         .position(|w| w == b"\r\n\r\n")
         .ok_or_else(malformed)?;
     let head = std::str::from_utf8(&reply[..end]).map_err(|_| malformed())?;
+    // Only the first line counts: "HTTP/1.x <code>[ <reason>]".
     let status = head
-        .split(' ')
-        .nth(1)
+        .lines()
+        .next()
+        .filter(|line| line.starts_with("HTTP/"))
+        .and_then(|line| line.split(' ').nth(1))
         .and_then(|code| code.parse().ok())
         .ok_or_else(malformed)?;
     Ok((status, reply[end + 4..].to_vec()))
+}
+
+/// Time left before `deadline`, or a timeout error (a zero socket timeout is itself an error).
+fn remaining(deadline: Instant) -> io::Result<Duration> {
+    let left = deadline.saturating_duration_since(Instant::now());
+    if left.is_zero() {
+        return Err(ErrorKind::TimedOut.into());
+    }
+    Ok(left)
 }
 
 fn reason(e: &io::Error) -> String {
