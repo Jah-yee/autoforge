@@ -81,7 +81,7 @@ type RunResult = {
   repo: { url: string; ref: string }; // never contains the token
   task: string;
   baseSha?: string; // absent if the clone failed
-  patch: string; // empty unless status is "changed"
+  patch: string; // the diff; also kept on "timed_out" for inspection; empty otherwise
   filesChanged: string[];
   logs: string; // redacted, tail-truncated
   exitCode: number | null; // null if the agent never ran or was killed
@@ -156,9 +156,10 @@ The agent is a command plus environment variables. The SDK ships no agent adapte
 1. **Create the sandbox.** If Docker is not available, return `failed` / `sandbox_unavailable`
    with a message telling the user to start Docker.
 2. **Clone and check out.** Clone `repo.url` into `/workspace`, check out `repo.ref`, record
-   `baseSha = git rev-parse HEAD`. If `repo.token` is set, it is passed to the clone through
-   an `http.extraHeader` on the command line (`git -c http.extraHeader=...`), so it is
-   never written to `.git/config` and never visible to the agent. Clone failure returns
+   `baseSha = git rev-parse HEAD`. If `repo.token` is set, the auth header is passed to git
+   through the `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_0`/`GIT_CONFIG_VALUE_0` environment variables
+   on the clone command only, so it never appears in a process list, is never written to
+   `.git/config`, and is never visible to the agent. Clone failure returns
    `failed` / `clone_failed`.
 3. **Write the task.** Write the task to `/workspace/.autoforge/task.md` and add `.autoforge/`
    to `/workspace/.git/info/exclude` so it never appears in the diff.
@@ -220,8 +221,10 @@ await publishToGitHub(result, {
 Runs on the host, not in the sandbox:
 
 1. Refuse unless `result.status === "changed"` (throws `PublishError` code `nothing_to_publish`).
-2. Create a temp dir, `git init`, fetch `result.baseSha` from the repo using the token through
-   `http.extraHeader`, check it out.
+   1b. Reject a `baseSha` that is not a 40 or 64 character hex sha (the result comes from the sandbox and is untrusted).
+2. Create a temp dir, `git init`, fetch `result.baseSha` from the repo with the token passed to
+   git through the `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_0`/`GIT_CONFIG_VALUE_0` environment
+   variables, check it out.
 3. `git apply --binary` the patch, commit as `author`.
 4. Push to `branch`. If the branch exists and `force` is false, throw `PublishError` code
    `branch_exists`.
