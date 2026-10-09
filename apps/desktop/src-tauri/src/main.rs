@@ -22,6 +22,9 @@ struct Shared {
     snapshot: Mutex<Snapshot>,
     /// When losing focus last hid the popover: the tray click that caused it must not reopen it.
     hidden_at: Mutex<Option<Instant>>,
+    /// The tray menu's first line. Linux AppIndicator has no tooltip and some desktops draw no
+    /// title, so the summary lives here too.
+    summary: MenuItem<tauri::Wry>,
 }
 
 #[tauri::command]
@@ -194,6 +197,7 @@ fn poll_once(app: &AppHandle, status_path: &tauri::Result<PathBuf>) {
         let _ = tray.set_title(snapshot.badge());
         let _ = tray.set_tooltip(Some(snapshot.tooltip()));
     }
+    let _ = app.state::<Shared>().summary.set_text(snapshot.tooltip());
     let _ = app.emit_to(POPOVER, "snapshot", &snapshot);
 }
 
@@ -213,13 +217,6 @@ fn main() {
                 .on_navigation(|_, url| own_page(url, tauri::is_dev()))
                 .build(),
         )
-        .manage(Shared {
-            snapshot: Mutex::new(Snapshot {
-                state: AppState::DaemonNotRunning,
-                last_ok_at: None,
-            }),
-            hidden_at: Mutex::new(None),
-        })
         .invoke_handler(tauri::generate_handler![
             current_state,
             open_url,
@@ -241,13 +238,22 @@ fn main() {
         .setup(|app| {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+            let summary = MenuItem::with_id(app, "summary", "autoforge", false, None::<&str>)?;
             let open = MenuItem::with_id(app, "open", "Open autoforge", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+            app.manage(Shared {
+                snapshot: Mutex::new(Snapshot {
+                    state: AppState::DaemonNotRunning,
+                    last_ok_at: None,
+                }),
+                hidden_at: Mutex::new(None),
+                summary: summary.clone(),
+            });
             TrayIconBuilder::with_id(TRAY)
                 .icon(app.default_window_icon().cloned().ok_or("no app icon")?)
                 .icon_as_template(true)
                 .tooltip("autoforge")
-                .menu(&Menu::with_items(app, &[&open, &quit])?)
+                .menu(&Menu::with_items(app, &[&summary, &open, &quit])?)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id().as_ref() {
                     "open" => show_popover(app, None),

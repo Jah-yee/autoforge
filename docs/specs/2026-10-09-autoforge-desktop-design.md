@@ -1,7 +1,7 @@
 # autoforge desktop: design spec (slice 3, the tray app)
 
 Date: 2026-10-09
-Status: draft, awaiting review
+Status: approved
 Builds on: slice 2 `autoforge serve` and its localhost status endpoint
 (`docs/specs/2026-10-09-autoforge-serve-design.md`, section 7). Product context: `PRODUCT.md`.
 
@@ -45,6 +45,7 @@ apps/desktop/
   src/
     main.ts          render AppState received from Rust
     model.ts         grouping, sorting, limits, relative time (pure)
+    view.ts          render the popover DOM from a snapshot (text nodes only), keyboard
   package.json
 ```
 
@@ -116,10 +117,12 @@ the last update ("3 min ago"), and "PR #N" when `prUrl` exists. Awaiting rows ad
 
 ### Badge and tooltip
 
-Platform reality: macOS and Linux show the count as the tray title next to the icon; Windows trays
-have no title, so on Windows the count is in the tooltip until a drawn badge icon is designed.
-Linux trays do not report clicks, so the tray also has a native menu (Open autoforge, Quit) on
-every platform.
+Platform reality: macOS shows the count as the tray title next to the icon. Windows trays have no
+title, so there the count is in the tooltip until a drawn badge icon is designed. Linux
+AppIndicator has no tooltip, and some desktops (KDE) may not draw the title, so on Linux the count
+is in the first line of the tray menu (a disabled item showing the tooltip text), and next to the
+icon where the desktop supports labels. Linux trays do not report clicks, so the tray has a native
+menu (summary line, Open autoforge, Quit) on every platform.
 
 - Badge: count of awaiting-approval runs; hidden at 0.
 - Warning indicator when the daemon is not running or unreachable, but only after it was reachable

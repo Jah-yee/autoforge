@@ -203,7 +203,7 @@ pnpm desktop:build   # unsigned installers in apps/desktop/src-tauri/target/rele
 ```
 
 - Click the tray icon to open the list, or use its menu (right click; on Linux, any click).
-- On Windows the count is in the tooltip; the icon itself does not change yet.
+- The count shows next to the icon on macOS, in the tooltip on Windows, and in the first line of the tray menu on Linux (also next to the icon where the desktop supports labels). The icon itself does not change yet.
 - On Linux, KDE shows the tray icon; GNOME shows it only with the AppIndicator extension.
 - Launch at login is off until you turn it on in the app.
 - Version 1 is read-only: it never publishes, discards or approves anything.
