@@ -76,7 +76,13 @@ Plain JSON. Safe to store in any database or file.
 type RunResult = {
   id: string; // random, used for branch names
   status: "changed" | "no_changes" | "failed" | "timed_out";
-  reason?: "aborted" | "clone_failed" | "sandbox_unavailable" | "sandbox_error" | "patch_too_large";
+  reason?:
+    | "aborted"
+    | "clone_failed"
+    | "sandbox_unavailable"
+    | "sandbox_error"
+    | "patch_too_large"
+    | "unsupported_encoding";
   message?: string; // human-readable detail when failed
   repo: { url: string; ref: string }; // never contains the token
   task: string;
@@ -142,7 +148,8 @@ new DockerSandbox({
 
 Driven through the `docker` CLI via `child_process`. No runtime dependencies.
 One container per run: `docker run -d` with `sleep infinity`, `docker exec` for each command,
-`docker rm -f` on destroy. No host folders are mounted.
+`docker rm -f` on destroy. No host folders are mounted. Every container also gets
+`--pids-limit 4096` (fixed, not an option) so a fork bomb cannot exhaust the host.
 
 ### Agent
 
@@ -171,12 +178,19 @@ The agent is a command plus environment variables. The SDK ships no agent adapte
      `AUTOFORGE_TASK_FILE` (`/workspace/.autoforge/task.md`).
    - stdout and stderr are split into lines, redacted, emitted as `log` events, and appended
      to the log buffer.
-5. **Collect.** Run `git add -A` then `git diff --cached --binary <baseSha>` inside the sandbox.
-   This captures the agent's work whether it committed or not.
+5. **Collect.** Run `git add -A` then `git diff --cached --binary --no-ext-diff --no-textconv
+<baseSha>` inside the sandbox. This captures the agent's work whether it committed or not.
+   - The agent owns `.git/config`, so every collect command runs as
+     `git -c core.fsmonitor=false -c core.hooksPath=/dev/null ...` and both diffs pass
+     `--no-ext-diff --no-textconv`; nothing in the repo config can run a command.
+   - Collect has its own deadline: the time left on the run, capped at 5 minutes, at least
+     1 second. If it fires: `failed` / `sandbox_error` ("collecting the changes timed out").
    - Empty diff: `no_changes`.
    - Non-empty diff: `changed`, even if the agent exited non-zero. `exitCode` lets the host judge.
    - Diff larger than `maxPatchBytes`: `failed` / `patch_too_large`, patch emptied.
-   - `filesChanged` comes from `git diff --cached --name-only <baseSha>`.
+   - Diff containing U+FFFD (text that was not UTF-8): `failed` / `unsupported_encoding`, patch
+     emptied. A file that really contains U+FFFD is a known false positive.
+   - `filesChanged` comes from `git diff --cached --name-only -z <baseSha>`, split on NUL.
 6. **Destroy the sandbox.**
 
 ### Early termination
@@ -244,12 +258,17 @@ action.
   difference from Factory, where the agent itself opens the PR.
 - **The clone token** is never written to disk inside the sandbox. For private repos, recommend
   a read-only fine-grained token.
-- **Sandbox defaults:** no host mounts, non-root user, 2 CPU and 4 GB memory, network on
-  (agents need their model API), `network: "none"` available.
+- **Sandbox defaults:** no host mounts, non-root user, 2 CPU, 4 GB memory, 4096 processes,
+  network on (agents need their model API), `network: "none"` available. The bridge network
+  can reach the host (`host.docker.internal` on Docker Desktop), the LAN and cloud metadata
+  endpoints; recommend `network: "none"` when the agent does not need the internet.
 - **Known limit:** the agent sees the API keys passed in `agent.env` and has network access, so
   a malicious task could try to exfiltrate them. The sandbox protects the user's machine and
-  repo credentials, not the model key. Guidance: use scoped or spend-limited keys, review
-  every PR. The decision to publish is the main safety gate.
+  repo credentials, not the model key. Guidance: use scoped or spend-limited keys.
+- **Review the patch before publishing.** Pushing a branch can trigger `on: push` CI with repo
+  secrets on agent-written code before anyone reviews a PR. A push token without the
+  `workflows` permission cannot push `.github/workflows` changes. The decision to publish is
+  the main safety gate.
 
 ## 5. Testing
 

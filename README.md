@@ -12,7 +12,8 @@ a Docker container, runs the agent, and hands you the diff. You decide whether i
 pnpm add autoforge
 ```
 
-Requires Node 22+, git, and Docker running locally (Docker Desktop, OrbStack or Colima).
+Requires Node 22+, git 2.31+ on the host, and Docker running locally (Docker Desktop, OrbStack
+or Colima). The sandbox image needs git 2.31+ and `sh`.
 
 ## Use
 
@@ -41,12 +42,12 @@ See `examples/basic.ts` for a complete Claude Code example.
 
 ## Results
 
-| status       | meaning                                                                                             |
-| :----------- | :-------------------------------------------------------------------------------------------------- |
-| `changed`    | The agent changed files. `patch` holds the diff against `baseSha`.                                  |
-| `no_changes` | The agent finished without changing anything.                                                       |
-| `timed_out`  | The timeout (default 30 minutes) stopped the agent. Any partial patch is kept for inspection.       |
-| `failed`     | See `reason`: `aborted`, `clone_failed`, `sandbox_unavailable`, `sandbox_error`, `patch_too_large`. |
+| status       | meaning                                                                                                                                                            |
+| :----------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `changed`    | The agent changed files. `patch` holds the diff against `baseSha`.                                                                                                 |
+| `no_changes` | The agent finished without changing anything.                                                                                                                      |
+| `timed_out`  | The timeout (default 30 minutes) stopped the agent. Any partial patch is kept for inspection.                                                                      |
+| `failed`     | See `reason`: `aborted`, `clone_failed`, `sandbox_unavailable`, `sandbox_error`, `patch_too_large`, `unsupported_encoding` (the patch has text that is not UTF-8). |
 
 `run()` never throws for these. It only throws `TypeError` for invalid options.
 
@@ -58,12 +59,17 @@ See `examples/basic.ts` for a complete Claude Code example.
   or written to disk in the sandbox. Use a read-only, fine-grained token for private repos.
 - **publishToGitHub treats the run result as untrusted input from the sandbox:** it validates
   `baseSha` and applies the patch with git on your machine.
-- **Sandbox defaults:** no host folders mounted, non-root user, 2 CPUs and 4 GB memory, network
-  on (agents need their model API). Use `network: "none"` for offline agents.
+- **Sandbox defaults:** no host folders mounted, non-root user, 2 CPUs, 4 GB memory, at most
+  4096 processes, network on (agents need their model API).
+- **Network:** the default bridge network can reach your host (`host.docker.internal` on Docker
+  Desktop), your LAN and cloud metadata endpoints. Use `network: "none"` when the agent does not
+  need the internet.
 - **Known limit:** the agent can read the env values you pass it (such as model API keys) and
   has network access, so a malicious task could try to send them somewhere. The sandbox protects
-  your machine and your repo credentials, not the model key. Use scoped or spend-limited keys,
-  and review every PR before merging.
+  your machine and your repo credentials, not the model key. Use scoped or spend-limited keys.
+- **Review the patch before calling publishToGitHub.** Pushing a branch can trigger `on: push`
+  CI with repo secrets on agent-written code before anyone reviews a PR. A push token without
+  the `workflows` permission cannot push `.github/workflows` changes.
 - Env values (4+ characters) and tokens are masked as `***` in events and logs.
 
 ## Custom sandboxes
