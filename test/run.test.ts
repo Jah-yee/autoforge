@@ -178,6 +178,31 @@ describe("sandbox failures", () => {
     });
   });
 
+  it("keeps the partial patch when collect is slow after a timeout", async () => {
+    const inner = new TempDirSandbox();
+    const sandbox: Sandbox = {
+      create: async () => {
+        const s = await inner.create();
+        return {
+          ...s,
+          exec: async (cmd, o) => {
+            if (cmd.includes("git") && cmd.includes("add"))
+              await new Promise((r) => setTimeout(r, 1_200));
+            return s.exec(cmd, o);
+          },
+        };
+      },
+    };
+    const r = await run({
+      ...base(),
+      sandbox,
+      agent: { command: fakeAgent("sleep") },
+      timeoutMs: 1_500,
+    });
+    expect(r.status).toBe("timed_out");
+    expect(r.patch).toContain("+x");
+  });
+
   it("returns sandbox_error when the session dies mid-run, and still destroys it", async () => {
     let destroyed = false;
     const sandbox: Sandbox = {

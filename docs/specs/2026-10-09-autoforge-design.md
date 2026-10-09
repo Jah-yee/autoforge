@@ -184,7 +184,7 @@ The agent is a command plus environment variables. The SDK ships no agent adapte
      `git -c core.fsmonitor=false -c core.hooksPath=/dev/null ...` and both diffs pass
      `--no-ext-diff --no-textconv`; nothing in the repo config can run a command.
    - Collect has its own deadline: the time left on the run, capped at 5 minutes, at least
-     1 second. If it fires: `failed` / `sandbox_error` ("collecting the changes timed out").
+     the smaller of the run timeout and 30 seconds. If it fires: `failed` / `sandbox_error` ("collecting the changes timed out").
    - Empty diff: `no_changes`.
    - Non-empty diff: `changed`, even if the agent exited non-zero. `exitCode` lets the host judge.
    - Diff larger than `maxPatchBytes`: `failed` / `patch_too_large`, patch emptied.

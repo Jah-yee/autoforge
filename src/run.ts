@@ -190,7 +190,9 @@ export async function run(options: RunOptions): Promise<RunResult> {
 
     emit({ type: "phase", phase: "collecting" });
     const left = timeoutMs - (Date.now() - started);
-    const deadline = AbortSignal.timeout(Math.max(1_000, Math.min(left, 5 * 60_000)));
+    const deadline = AbortSignal.timeout(
+      Math.min(5 * 60_000, Math.max(left, Math.min(timeoutMs, 30_000))),
+    );
     const collectSignal = options.signal ? AbortSignal.any([deadline, options.signal]) : deadline;
     const collect = (args: string[], limit?: number) =>
       capture([...SAFE_GIT, ...args], limit, collectSignal);
