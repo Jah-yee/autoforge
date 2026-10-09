@@ -4,11 +4,13 @@ mod status;
 mod urls;
 
 use status::{AppState, Snapshot};
+use std::panic::AssertUnwindSafe;
+use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, WebviewWindow, WindowEvent};
+use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, Url, WebviewWindow, WindowEvent};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 use tauri_plugin_opener::OpenerExt;
 
@@ -24,7 +26,11 @@ struct Shared {
 
 #[tauri::command]
 fn current_state(shared: tauri::State<Shared>) -> Snapshot {
-    shared.snapshot.lock().unwrap().clone()
+    shared
+        .snapshot
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
 }
 
 #[tauri::command]
@@ -116,12 +122,28 @@ fn toggle_popover(app: &AppHandle, click: PhysicalPosition<f64>) {
     let Some(window) = app.get_webview_window(POPOVER) else {
         return;
     };
-    let hidden_at = *app.state::<Shared>().hidden_at.lock().unwrap();
+    let hidden_at = *app
+        .state::<Shared>()
+        .hidden_at
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
     let just_hidden = hidden_at.is_some_and(|t| t.elapsed() < Duration::from_millis(300));
     if window.is_visible().unwrap_or(false) {
         let _ = window.hide();
     } else if !just_hidden {
         show_popover(app, Some(click));
+    }
+}
+
+/// Whether the webview may navigate to `url`: only the app's own bundled page
+/// (`tauri://localhost` on macOS and Linux, `http(s)://tauri.localhost` on Windows), plus the
+/// Vite dev server under `tauri dev`. Links leave through `open_url`, never by navigating.
+fn own_page(url: &Url, dev: bool) -> bool {
+    match (url.scheme(), url.host_str(), url.port()) {
+        ("tauri", Some("localhost"), None) => true,
+        ("http" | "https", Some("tauri.localhost"), None) => true,
+        ("http", Some("localhost"), Some(1420)) => dev,
+        _ => false,
     }
 }
 
@@ -139,32 +161,40 @@ fn start_polling(app: AppHandle) {
         .home_dir()
         .map(|home| home.join(".autoforge").join("status.json"));
     std::thread::spawn(move || loop {
-        let state = match &status_path {
-            Ok(path) => status::poll(path),
-            Err(_) => AppState::DaemonNotRunning,
-        };
-        let snapshot = {
-            let shared = app.state::<Shared>();
-            let mut current = shared.snapshot.lock().unwrap();
-            let ok = matches!(state, AppState::Ok { .. });
-            let last_ok_at = if ok {
-                Some(now_ms())
-            } else {
-                current.last_ok_at
-            };
-            *current = Snapshot { state, last_ok_at };
-            current.clone()
-        };
-        if let Some(tray) = app.tray_by_id(TRAY) {
-            // The title shows next to the icon on macOS and Linux; Windows only has the tooltip,
-            // which carries the same count.
-            #[cfg(not(windows))]
-            let _ = tray.set_title(snapshot.badge());
-            let _ = tray.set_tooltip(Some(snapshot.tooltip()));
+        let started = Instant::now();
+        // A panic in one poll must not stop the badge for good: log it and poll again.
+        if std::panic::catch_unwind(AssertUnwindSafe(|| poll_once(&app, &status_path))).is_err() {
+            eprintln!("autoforge: a poll panicked; polling continues");
         }
-        let _ = app.emit_to(POPOVER, "snapshot", &snapshot);
-        std::thread::sleep(POLL_EVERY);
+        std::thread::sleep(POLL_EVERY.saturating_sub(started.elapsed()));
     });
+}
+
+/// One poll: update the shared snapshot, the tray and the popover.
+fn poll_once(app: &AppHandle, status_path: &tauri::Result<PathBuf>) {
+    let state = match status_path {
+        Ok(path) => status::poll(path),
+        Err(_) => AppState::DaemonNotRunning,
+    };
+    let snapshot = {
+        let shared = app.state::<Shared>();
+        let mut current = shared.snapshot.lock().unwrap_or_else(|e| e.into_inner());
+        let ok = matches!(state, AppState::Ok { .. });
+        let last_ok_at = if ok {
+            Some(now_ms())
+        } else {
+            current.last_ok_at
+        };
+        *current = Snapshot { state, last_ok_at };
+        current.clone()
+    };
+    if let Some(tray) = app.tray_by_id(TRAY) {
+        // The title shows next to the icon on macOS and Linux. set_title is a no-op on Windows,
+        // where the count is in the tooltip only.
+        let _ = tray.set_title(snapshot.badge());
+        let _ = tray.set_tooltip(Some(snapshot.tooltip()));
+    }
+    let _ = app.emit_to(POPOVER, "snapshot", &snapshot);
 }
 
 fn main() {
@@ -178,6 +208,11 @@ fn main() {
             None,
         ))
         .plugin(tauri_plugin_opener::init())
+        .plugin(
+            tauri::plugin::Builder::<tauri::Wry>::new("navigation-guard")
+                .on_navigation(|_, url| own_page(url, tauri::is_dev()))
+                .build(),
+        )
         .manage(Shared {
             snapshot: Mutex::new(Snapshot {
                 state: AppState::DaemonNotRunning,
@@ -196,7 +231,11 @@ fn main() {
         .on_window_event(|window, event| {
             if let WindowEvent::Focused(false) = event {
                 let _ = window.hide();
-                *window.state::<Shared>().hidden_at.lock().unwrap() = Some(Instant::now());
+                *window
+                    .state::<Shared>()
+                    .hidden_at
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner()) = Some(Instant::now());
             }
         })
         .setup(|app| {
@@ -236,7 +275,34 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::popover_origin;
+    use super::{own_page, popover_origin};
+    use tauri::Url;
+
+    fn page(url: &str, dev: bool) -> bool {
+        own_page(&Url::parse(url).unwrap(), dev)
+    }
+
+    #[test]
+    fn navigation_stays_on_the_bundled_app() {
+        assert!(page("tauri://localhost/index.html", false));
+        assert!(page("http://tauri.localhost/", false));
+        assert!(page("https://tauri.localhost/", false));
+        assert!(page("http://localhost:1420/", true));
+        for url in [
+            "http://localhost:1420/",
+            "https://github.com/o/r",
+            "https://linear.app/x",
+            "http://tauri.localhost.evil.com/",
+            "http://tauri.localhost:8080/",
+            "tauri://evil/",
+            "http://127.0.0.1:4100/runs",
+            "file:///etc/passwd",
+            "data:text/html,x",
+        ] {
+            assert!(!page(url, false), "{url}");
+        }
+        assert!(!page("http://localhost:1421/", true));
+    }
 
     const SIZE: (f64, f64) = (360.0, 480.0);
     const SCREEN: (f64, f64, f64, f64) = (0.0, 0.0, 1920.0, 1080.0);
