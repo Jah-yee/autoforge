@@ -184,4 +184,81 @@ describe("LinearClient", () => {
       input: { issueId: "issue-1", url: "https://github.com/o/r/pull/1", title: "Draft PR" },
     });
   });
+
+  it("stops paging when the cursor repeats", async () => {
+    let n = 0;
+    const client = new LinearClient({
+      apiKey: "k",
+      fetch: (async () => {
+        n++;
+        return page([rawIssue(`i${n}`)], "same");
+      }) as unknown as typeof globalThis.fetch,
+    });
+    const issues = await client.changedIssues("2026-10-09T00:00:00.000Z", []);
+    expect(n).toBeLessThanOrEqual(2);
+    expect(issues.length).toBe(n);
+  });
+
+  it("gives up after 200 pages of ever-new cursors", async () => {
+    let n = 0;
+    const client = new LinearClient({
+      apiKey: "k",
+      fetch: (async () => page([], `c${++n}`)) as unknown as typeof globalThis.fetch,
+    });
+    await expect(client.changedIssues("2026-10-09T00:00:00.000Z", [])).rejects.toThrow(
+      new LinearError("pagination did not terminate"),
+    );
+    expect(n).toBe(200);
+  });
+
+  it("asks for the last 100 comments and sorts them oldest first", async () => {
+    const { client, calls } = stub(
+      page([rawIssue("a", ["2026-10-09T12:00:03.000Z", "2026-10-09T12:00:01.000Z"])], null),
+    );
+    const [issue] = await client.changedIssues("2026-10-09T00:00:00.000Z", []);
+    expect(calls[0]?.query).toContain("comments(last: 100)");
+    expect(issue?.comments.map((c) => c.createdAt)).toEqual([
+      "2026-10-09T12:00:01.000Z",
+      "2026-10-09T12:00:03.000Z",
+    ]);
+  });
+
+  it("turns a null JSON body into a LinearError", async () => {
+    const { client } = stub(new Response("null", { status: 200 }));
+    await expect(client.viewer()).rejects.toThrow(LinearError);
+  });
+
+  it("throws LinearError when a mutation reports success: false", async () => {
+    const { client } = stub(
+      data({ commentCreate: { success: false, comment: null } }),
+      data({ attachmentCreate: { success: false } }),
+      data({ issue: { team: { states: { nodes: [{ id: "s", position: 1 }] } } } }),
+      data({ issueUpdate: { success: false } }),
+    );
+    await expect(client.comment("i", "b")).rejects.toThrow(LinearError);
+    await expect(client.attachUrl("i", "u", "t")).rejects.toThrow(LinearError);
+    await expect(client.moveToStarted("i")).rejects.toThrow(LinearError);
+  });
+
+  it("never leaks the API key into error messages", async () => {
+    const key = "lin_api_SECRET_xyz";
+    const responses: (Response | Error)[] = [
+      new Error("ECONNRESET"),
+      new Response("boom", { status: 500 }),
+      new Response(JSON.stringify({ errors: [{ message: "bad" }] }), { status: 200 }),
+    ];
+    const client = new LinearClient({
+      apiKey: key,
+      fetch: (async () => {
+        const r = responses.shift();
+        if (r instanceof Error) throw r;
+        return r;
+      }) as unknown as typeof globalThis.fetch,
+    });
+    for (let i = 0; i < 3; i++) {
+      const err = await client.viewer().catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(LinearError);
+      expect((err as Error).message).not.toContain(key);
+    }
+  });
 });

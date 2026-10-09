@@ -68,11 +68,11 @@ type IssuePage = {
   issues: { nodes: RawIssue[]; pageInfo: { hasNextPage: boolean; endCursor: string | null } };
 };
 
-// ponytail: 100 comments and 50 labels per issue; paginate them if real issues get longer.
+// ponytail: last 100 comments and 50 labels per issue; paginate them if real issues get longer.
 const ISSUE_FIELDS = `id identifier title description updatedAt
   assignee { id } state { type } team { id key name } project { id name }
   labels(first: 50) { nodes { name } }
-  comments(first: 100) { nodes { id body createdAt user { id name } } }`;
+  comments(last: 100) { nodes { id body createdAt user { id name } } }`;
 
 const toIssue = (r: RawIssue): LinearIssue => ({
   id: r.id,
@@ -123,7 +123,8 @@ export class LinearClient implements LinearApi {
     const text = await res.text().catch(() => "");
     let json: { data?: T; errors?: { message?: string }[] } = {};
     try {
-      json = JSON.parse(text) as typeof json;
+      const parsed: unknown = JSON.parse(text);
+      if (parsed && typeof parsed === "object") json = parsed as typeof json;
     } catch {
       // reported below with the raw text
     }
@@ -147,7 +148,8 @@ export class LinearClient implements LinearApi {
     const filter = trackedIds.length ? { or: [mine, { id: { in: trackedIds } }] } : mine;
     const out: LinearIssue[] = [];
     let after: string | null = null;
-    do {
+    for (let pages = 0; ; pages++) {
+      if (pages >= 200) throw new LinearError("pagination did not terminate");
       const d: IssuePage = await this.gql<IssuePage>(
         `query($filter: IssueFilter!, $after: String) {
           issues(filter: $filter, first: 50, after: $after) {
@@ -158,8 +160,10 @@ export class LinearClient implements LinearApi {
         { filter, after },
       );
       out.push(...d.issues.nodes.map(toIssue));
-      after = d.issues.pageInfo.hasNextPage ? d.issues.pageInfo.endCursor : null;
-    } while (after);
+      const { hasNextPage, endCursor } = d.issues.pageInfo;
+      if (!hasNextPage || !endCursor || endCursor === after) break;
+      after = endCursor;
+    }
     return out;
   }
 
@@ -172,7 +176,8 @@ export class LinearClient implements LinearApi {
       }`,
       { input: { issueId, body } },
     );
-    if (!d.commentCreate.comment) throw new LinearError("Linear did not create the comment");
+    if (!d.commentCreate.success || !d.commentCreate.comment)
+      throw new LinearError("Linear did not create the comment");
     return d.commentCreate.comment;
   }
 
@@ -187,18 +192,20 @@ export class LinearClient implements LinearApi {
     );
     const first = d.issue.team.states.nodes.toSorted((a, b) => a.position - b.position)[0];
     if (!first) return;
-    await this.gql(
+    const u = await this.gql<{ issueUpdate: { success: boolean } }>(
       `mutation($id: String!, $stateId: String!) {
         issueUpdate(id: $id, input: { stateId: $stateId }) { success }
       }`,
       { id: issueId, stateId: first.id },
     );
+    if (!u.issueUpdate.success) throw new LinearError("Linear did not move the issue");
   }
 
   async attachUrl(issueId: string, url: string, title: string): Promise<void> {
-    await this.gql(
+    const d = await this.gql<{ attachmentCreate: { success: boolean } }>(
       `mutation($input: AttachmentCreateInput!) { attachmentCreate(input: $input) { success } }`,
       { input: { issueId, url, title } },
     );
+    if (!d.attachmentCreate.success) throw new LinearError("Linear did not attach the URL");
   }
 }
