@@ -108,6 +108,7 @@ interface Sandbox {
 }
 
 interface SandboxSession {
+  readonly workdir: string;      // where the repo is cloned; "/workspace" for Docker
   exec(cmd: string[], opts: {
     cwd?: string;
     env?: Record<string, string>;
@@ -120,7 +121,9 @@ interface SandboxSession {
 }
 ```
 
-`exec` takes an argv array, never a shell string.
+`exec` takes an argv array, never a shell string. `workdir` lets a sandbox choose where the
+repo lives (Docker uses `/workspace`; the test-only temp-dir sandbox uses a host temp path).
+Throw `SandboxUnavailableError` (exported) from `create()` when the backend is not running.
 
 ### `DockerSandbox` options
 
@@ -181,7 +184,8 @@ The agent is a command plus environment variables. The SDK ships no agent adapte
 | Sandbox or clone error | `failed` with a reason and message |
 
 Expected failures are returned in the result, never thrown. `run()` only throws on programmer
-errors (invalid options), so hosts can store every run the same way.
+errors (invalid options), so hosts can store every run the same way. `repo.url` and `repo.ref`
+starting with `-` are rejected as invalid options, because git would read them as flags.
 
 ### Redaction and limits
 
@@ -204,6 +208,8 @@ await publishToGitHub(result, {
   draft: true,                   // default true
   author: { name, email },       // default "autoforge" <autoforge@users.noreply.github.com>
   force: false,                  // overwrite an existing branch
+  gitUrl,                        // default https://github.com/<repo>.git (GitHub Enterprise, tests)
+  apiUrl,                        // default https://api.github.com
   fetch,                         // optional, injectable for tests
 });
 ```
@@ -222,8 +228,8 @@ Runs on the host, not in the sandbox:
 Because the patch is applied to the exact commit the agent started from, it always applies.
 If `base` has moved on, GitHub shows any conflicts on the PR as usual.
 
-`PublishError` has a `code`: `nothing_to_publish`, `branch_exists`, `apply_failed`,
-`push_failed`, `github_api_error`. Publishing throws because it is a single host-triggered
+`PublishError` has a `code`: `nothing_to_publish`, `fetch_failed`, `apply_failed`,
+`branch_exists`, `push_failed`, `github_api_error`. Publishing throws because it is a single host-triggered
 action.
 
 ### Security model (also written into the README)
