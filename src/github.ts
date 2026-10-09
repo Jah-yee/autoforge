@@ -87,7 +87,7 @@ export async function publishToGitHub(
   const git = async (code: PublishErrorCode, ...args: string[]) => {
     const r = await proc("git", args, { cwd, env });
     if (r.exitCode !== 0) {
-      throw new PublishError(code, `git ${args.join(" ")} failed: ${redact(r.stderr.trim())}`);
+      throw new PublishError(code, redact(`git ${args.join(" ")} failed: ${r.stderr.trim()}`));
     }
     return r.stdout.trim();
   };

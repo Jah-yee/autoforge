@@ -1,3 +1,5 @@
+import { chmod, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import { publishToGitHub, type PublishOptions } from "../src/github.js";
 import { run, type RunResult } from "../src/index.js";
@@ -120,6 +122,17 @@ describe("publishToGitHub", () => {
       expect(text).not.toContain("tkn-123456");
       expect(text).not.toContain(b64);
     }
+  });
+
+  it("redacts the token from the git command in a failure message", async () => {
+    const hook = join(repo.bare, "hooks", "pre-receive");
+    await writeFile(hook, "#!/bin/sh\nexit 1\n");
+    await chmod(hook, 0o755);
+    const err = await publishToGitHub(changed, opts({ branch: "autoforge/tkn-123456" }))
+      .catch((e: unknown) => e)
+      .finally(() => rm(hook));
+    expect(err).toMatchObject({ code: "push_failed" });
+    expect(String((err as Error).message)).not.toContain("tkn-123456");
   });
 
   it("rejects a baseSha that is not a commit sha without touching GitHub", async () => {
