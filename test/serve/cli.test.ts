@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { chmod, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -10,7 +10,13 @@ import { startStatusServer } from "../../src/serve/status.js";
 function capture(extra: Partial<CliIo> = {}) {
   const out: string[] = [];
   const err: string[] = [];
-  const io: CliIo = { out: (l) => out.push(l), err: (l) => err.push(l), env: {}, ...extra };
+  const io: CliIo = {
+    out: (l) => out.push(l),
+    err: (l) => err.push(l),
+    env: {},
+    settleMs: 0,
+    ...extra,
+  };
   return { out, err, io };
 }
 
@@ -220,6 +226,85 @@ describe("autoforge cli", () => {
     expect(await main(["serve", "--dir", d], t.io)).toBe(0);
     expect(lockDuringPoll).toBe(String(process.pid));
     expect(existsSync(join(d, "serve.lock"))).toBe(false);
+  });
+
+  it("serve checks the lock before every tick, including the first", async () => {
+    const d = await withConfig();
+    let calls = 0;
+    const fetch = (async () => {
+      calls++;
+      await writeFile(join(d, "serve.lock"), String(process.ppid)); // taken during start()
+      return gql({ viewer: { id: "u1", name: "Me" } });
+    }) as typeof globalThis.fetch;
+    const t = capture({ fetch, env: { LINEAR_API_KEY: "k", GITHUB_TOKEN: "g" } });
+    expect(await main(["serve", "--dir", d], t.io)).toBe(1);
+    expect(calls).toBe(1); // the viewer query in start(), and no tick
+    const events = t.out.map((l) => JSON.parse(l) as { level: string; message: string });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        level: "error",
+        message: "lost serve.lock; another instance took over",
+      }),
+    );
+    expect(existsSync(join(d, "status.json"))).toBe(false); // ours, removed on close
+    expect(await readFile(join(d, "serve.lock"), "utf8")).toBe(String(process.ppid));
+  });
+
+  it("serve exits cleanly on a signal during the settle delay", async () => {
+    const d = await withConfig();
+    let calls = 0;
+    const fetch = (async () => {
+      calls++;
+      return gql({ viewer: { id: "u1", name: "Me" } });
+    }) as typeof globalThis.fetch;
+    const stop = new AbortController();
+    const t = capture({
+      fetch,
+      signal: stop.signal,
+      settleMs: 5_000,
+      env: { LINEAR_API_KEY: "k", GITHUB_TOKEN: "g" },
+    });
+    const serving = main(["serve", "--dir", d], t.io);
+    const lock = join(d, "serve.lock");
+    while (!existsSync(lock)) await new Promise((r) => setTimeout(r, 5));
+    stop.abort();
+    expect(await serving).toBe(0);
+    expect(calls).toBe(0);
+    expect(existsSync(lock)).toBe(false);
+    expect(existsSync(join(d, "state.json"))).toBe(false);
+  });
+
+  it("serve explains a lock that vanished during the settle delay", async () => {
+    const d = await withConfig();
+    const t = capture({ settleMs: 300, env: { LINEAR_API_KEY: "k", GITHUB_TOKEN: "g" } });
+    const serving = main(["serve", "--dir", d], t.io);
+    const lock = join(d, "serve.lock");
+    while (!existsSync(lock)) await new Promise((r) => setTimeout(r, 5));
+    await rm(lock);
+    expect(await serving).toBe(1);
+    expect(t.err).toEqual([
+      "autoforge serve could not keep serve.lock (another instance started at the same time).",
+    ]);
+  });
+
+  it("serve re-checks the lock after a settle delay and backs off before touching state", async () => {
+    const d = await withConfig();
+    let calls = 0;
+    const fetch = (async () => {
+      calls++;
+      return gql({ viewer: { id: "u1", name: "Me" } });
+    }) as typeof globalThis.fetch;
+    const t = capture({ fetch, settleMs: 300, env: { LINEAR_API_KEY: "k", GITHUB_TOKEN: "g" } });
+    const serving = main(["serve", "--dir", d], t.io);
+    const lock = join(d, "serve.lock");
+    while (!existsSync(lock)) await new Promise((r) => setTimeout(r, 5));
+    await writeFile(lock, String(process.ppid)); // a racer's lock replaced ours
+    expect(await serving).toBe(1);
+    expect(t.err).toEqual([`autoforge serve is already running (pid ${process.ppid}).`]);
+    expect(calls).toBe(0);
+    expect(existsSync(join(d, "state.json"))).toBe(false);
+    expect(existsSync(join(d, "status.json"))).toBe(false);
+    expect(await readFile(lock, "utf8")).toBe(String(process.ppid));
   });
 
   it("serve releases the lock when the daemon fails to start", async () => {

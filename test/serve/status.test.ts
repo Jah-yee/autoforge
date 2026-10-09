@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { readFile, stat } from "node:fs/promises";
+import { readFile, stat, writeFile } from "node:fs/promises";
 import { request } from "node:http";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -57,6 +57,16 @@ describe("status endpoint", () => {
     await server?.close();
     server = undefined;
     expect(existsSync(file)).toBe(false);
+  });
+
+  it("leaves status.json alone on close when another instance has replaced it", async () => {
+    const h = await running();
+    const file = join(h.dir, "status.json");
+    const theirs = JSON.stringify({ port: 1, token: "t", pid: process.ppid });
+    await writeFile(file, theirs);
+    await server?.close();
+    server = undefined;
+    expect(await readFile(file, "utf8")).toBe(theirs);
   });
 
   it("answers 401 without the right token and 403 to any request with an Origin", async () => {

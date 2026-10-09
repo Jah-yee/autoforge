@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { realpathSync } from "node:fs";
-import { readFile, rm, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -10,6 +10,7 @@ import { DockerSandbox } from "../docker.js";
 import { ConfigError, loadConfig, readEnvFile, readSecrets, type Config } from "./config.js";
 import { Daemon, type RunSummary } from "./daemon.js";
 import { LinearClient } from "./linear.js";
+import { lockHeld, readPid, releaseLock, takeLock } from "./lock.js";
 import { installService, uninstallService } from "./service.js";
 import { startStatusServer } from "./status.js";
 
@@ -21,6 +22,8 @@ export type CliIo = {
   signal?: AbortSignal;
   /** Used for Linear and for `status`. */
   fetch?: typeof fetch;
+  /** How long serve waits after taking the lock before re-checking it. Default 250 ms. */
+  settleMs?: number;
 };
 
 const USAGE = `Usage:
@@ -72,39 +75,39 @@ async function serve(dir: string, io: CliIo): Promise<number> {
   const { linearApiKey } = readSecrets(config, env);
   const lock = join(dir, "serve.lock");
   const holder = await takeLock(lock);
-  if (holder) {
+  if (holder !== null) {
     io.err(`autoforge serve is already running (pid ${holder}).`);
     return 1;
   }
+  const stop = new AbortController();
+  const onSignal = () => stop.abort();
+  process.once("SIGINT", onSignal);
+  process.once("SIGTERM", onSignal);
+  if (io.signal?.aborted) onSignal();
+  io.signal?.addEventListener("abort", onSignal, { once: true });
   try {
-    return await run(dir, io, config, env, linearApiKey);
-  } finally {
-    await rm(lock, { force: true });
-  }
-}
-
-/** One daemon per state dir. Returns the pid of a live holder, or null once the lock is ours. */
-async function takeLock(path: string): Promise<number | null> {
-  for (;;) {
-    try {
-      await writeFile(path, String(process.pid), { flag: "wx", mode: 0o600 });
-      return null;
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+    // A starter that read the old dead pid can still move our fresh lock aside and, if a third
+    // starter links meanwhile, fail to put it back. Let such races land before touching state.
+    // ponytail: a starter stalled mid-takeover for longer than settleMs can still displace us
+    // later; the loop check then stops us before the next tick. Airtight needs a kernel lock
+    // (flock), which Node does not expose.
+    await sleep(io.settleMs ?? 250, undefined, { signal: stop.signal }).catch(() => {});
+    if (stop.signal.aborted) return 0;
+    if (!(await lockHeld(lock))) {
+      const pid = await readPid(lock);
+      io.err(
+        pid
+          ? `autoforge serve is already running (pid ${pid}).`
+          : "autoforge serve could not keep serve.lock (another instance started at the same time).",
+      );
+      return 1;
     }
-    const pid = Number(await readFile(path, "utf8").catch(() => ""));
-    if (pid > 0 && pid !== process.pid && alive(pid)) return pid;
-    // ponytail: stale-lock takeover can race a second starter; the O_EXCL retry settles it.
-    await rm(path, { force: true });
-  }
-}
-
-function alive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (e) {
-    return (e as NodeJS.ErrnoException).code === "EPERM"; // exists, owned by someone else
+    return await run(dir, io, config, env, linearApiKey, lock, stop.signal);
+  } finally {
+    process.off("SIGINT", onSignal);
+    process.off("SIGTERM", onSignal);
+    io.signal?.removeEventListener("abort", onSignal);
+    await releaseLock(lock);
   }
 }
 
@@ -114,6 +117,8 @@ async function run(
   config: Config,
   env: Record<string, string | undefined>,
   linearApiKey: string,
+  lock: string,
+  signal: AbortSignal,
 ): Promise<number> {
   const log = (entry: object) =>
     io.out(JSON.stringify({ time: new Date().toISOString(), ...entry }));
@@ -127,31 +132,34 @@ async function run(
   });
   await daemon.start();
   const server = await startStatusServer(daemon, dir);
-  const stop = new AbortController();
-  const onSignal = () => stop.abort();
-  process.once("SIGINT", onSignal);
-  process.once("SIGTERM", onSignal);
-  if (io.signal?.aborted) onSignal();
-  io.signal?.addEventListener("abort", onSignal, { once: true });
   log({
     level: "info",
     event: "started",
     message: `polling Linear every ${config.pollSeconds} s; status on 127.0.0.1:${server.port}`,
   });
+  let code = 0;
   try {
-    while (!stop.signal.aborted) {
+    while (!signal.aborted) {
+      // Backstop for the lock's leftover races: no tick starts without a fresh ownership check.
+      if (!(await lockHeld(lock))) {
+        log({
+          level: "error",
+          event: "lock_lost",
+          message: "lost serve.lock; another instance took over",
+        });
+        code = 1;
+        break;
+      }
       await daemon.tick();
-      await sleep(daemon.nextDelayMs(), undefined, { signal: stop.signal }).catch(() => {});
+      await sleep(daemon.nextDelayMs(), undefined, { signal }).catch(() => {});
     }
   } finally {
-    process.off("SIGINT", onSignal);
-    process.off("SIGTERM", onSignal);
     // Close the status server first so no HTTP command lands mid-shutdown.
     await server.close();
     await daemon.stop();
   }
   log({ level: "info", event: "stopped", message: "autoforge serve stopped" });
-  return 0;
+  return code;
 }
 
 async function status(dir: string, io: CliIo): Promise<number> {

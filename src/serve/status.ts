@@ -1,5 +1,5 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { rm } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
@@ -79,7 +79,11 @@ export async function startStatusServer(
     token,
     close: async () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
-      await rm(file, { force: true });
+      // Another instance may have replaced it (we lost serve.lock): leave theirs.
+      const owner = await readFile(file, "utf8")
+        .then((t) => (JSON.parse(t) as { pid?: number }).pid)
+        .catch(() => undefined);
+      if (owner === process.pid) await rm(file, { force: true });
     },
   };
 }

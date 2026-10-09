@@ -139,7 +139,10 @@ Until autoforge is on npm, get the `autoforge` command from a clone of this repo
    `autoforge service install` again after upgrading or switching Node (for example with nvm).
 
 Only one daemon runs per state directory: a second `autoforge serve` on the same `--dir` exits
-with "autoforge serve is already running (pid N)."
+with "autoforge serve is already running (pid N)." A lock left by a crashed daemon is taken over
+automatically. A daemon checks the lock again shortly after start-up and before every poll; if
+another instance has taken it, it logs "lost serve.lock; another instance took over" and exits. After a reboot a reused pid can make an
+old lock look live: if no daemon is running, delete `<dir>/serve.lock`.
 
 ### Use
 
