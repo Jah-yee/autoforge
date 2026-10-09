@@ -10,7 +10,13 @@ import { startStatusServer } from "../../src/serve/status.js";
 function capture(extra: Partial<CliIo> = {}) {
   const out: string[] = [];
   const err: string[] = [];
-  const io: CliIo = { out: (l) => out.push(l), err: (l) => err.push(l), env: {}, ...extra };
+  const io: CliIo = {
+    out: (l) => out.push(l),
+    err: (l) => err.push(l),
+    env: {},
+    settleMs: 0,
+    ...extra,
+  };
   return { out, err, io };
 }
 
@@ -224,10 +230,12 @@ describe("autoforge cli", () => {
 
   it("serve stops with an error when another instance takes its lock", async () => {
     const d = await withConfig();
+    const theirs = JSON.stringify({ port: 1, token: "t", pid: process.ppid });
     const fetch = (async (_url: string | URL | Request, init: RequestInit = {}) => {
       const { query } = JSON.parse(String(init.body)) as { query: string };
       if (query.includes("viewer")) return gql({ viewer: { id: "u1", name: "Me" } });
       await writeFile(join(d, "serve.lock"), String(process.ppid)); // someone else's now
+      await writeFile(join(d, "status.json"), theirs);
       return gql({ issues: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } });
     }) as typeof globalThis.fetch;
     const t = capture({ fetch, env: { LINEAR_API_KEY: "k", GITHUB_TOKEN: "g" } });
@@ -239,8 +247,28 @@ describe("autoforge cli", () => {
         message: "lost serve.lock; another instance took over",
       }),
     );
-    expect(existsSync(join(d, "status.json"))).toBe(false);
+    expect(await readFile(join(d, "status.json"), "utf8")).toBe(theirs);
     expect(await readFile(join(d, "serve.lock"), "utf8")).toBe(String(process.ppid));
+  });
+
+  it("serve re-checks the lock after a settle delay and backs off before touching state", async () => {
+    const d = await withConfig();
+    let calls = 0;
+    const fetch = (async () => {
+      calls++;
+      return gql({ viewer: { id: "u1", name: "Me" } });
+    }) as typeof globalThis.fetch;
+    const t = capture({ fetch, settleMs: 300, env: { LINEAR_API_KEY: "k", GITHUB_TOKEN: "g" } });
+    const serving = main(["serve", "--dir", d], t.io);
+    const lock = join(d, "serve.lock");
+    while (!existsSync(lock)) await new Promise((r) => setTimeout(r, 5));
+    await writeFile(lock, String(process.ppid)); // a racer's lock replaced ours
+    expect(await serving).toBe(1);
+    expect(t.err).toEqual([`autoforge serve is already running (pid ${process.ppid}).`]);
+    expect(calls).toBe(0);
+    expect(existsSync(join(d, "state.json"))).toBe(false);
+    expect(existsSync(join(d, "status.json"))).toBe(false);
+    expect(await readFile(lock, "utf8")).toBe(String(process.ppid));
   });
 
   it("serve releases the lock when the daemon fails to start", async () => {

@@ -257,20 +257,24 @@ If saving a finished run fails (for example the patch cannot be written), the is
 ### Single instance
 
 Only one daemon may use a state directory. Before the daemon starts, `autoforge serve` writes its
-pid to a temp file in the state directory and hard-links it to `<dir>/serve.lock`, so the lock never
-exists without its pid. If the lock exists:
+pid to a temp file in the state directory and hard-links it to `<dir>/serve.lock`, so a lock made
+this way is never empty. If the lock exists:
 
-- empty or unreadable: another starter is mid-write; retry every 50 ms, and after 40 tries exit
-  asking the user to delete it if no daemon is running.
-- a live pid (or its own): exit with "autoforge serve is already running (pid N)."
-- a dead pid: stale. Rename it aside (only one starter can), check the moved file still holds that
-  dead pid, delete it and retry. If it holds another pid, a racer's fresh lock was moved: link it
-  back and retry, which then refuses.
+- empty, unreadable or a dangling symlink (hand-written, or left by a version before the link-based
+  create): retry every 50 ms, and after 40 tries exit asking the user to delete it if no daemon is
+  running.
+- a live pid other than its own: exit with "autoforge serve is already running (pid N)."
+- a dead pid, or its own pid (reused from a dead daemon): stale. Rename it aside (only one starter
+  can), check the moved file still holds that pid, delete it and retry. If it holds another pid, a
+  racer's fresh lock was moved: link it back and retry, which then refuses.
 
-On shutdown, after the daemon stops, the lock is removed only if it still holds the daemon's pid.
-As a backstop, the daemon reads the lock after every poll; if it no longer holds its pid it logs
-"lost serve.lock; another instance took over", stops the status server and the daemon, and exits 1.
-A pid reused after a reboot makes a dead daemon's lock look live; delete `serve.lock` by hand.
+After taking the lock, serve waits 250 ms and reads it again before touching any state; if it no
+longer holds its pid (a racer displaced it), it exits with the "already running" message. Each loop
+iteration checks the lock again before polling; if it no longer holds the daemon's pid, the daemon
+logs "lost serve.lock; another instance took over", stops the status server and the daemon, and
+exits 1. On shutdown the lock is removed only if it still holds the daemon's pid, and `status.json`
+only if its `pid` is the daemon's. A pid reused after a reboot by another process makes a dead
+daemon's lock look live; delete `serve.lock` by hand.
 
 ## 6. State
 

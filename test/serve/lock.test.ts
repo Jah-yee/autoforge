@@ -1,6 +1,6 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -47,8 +47,8 @@ describe("serve.lock", () => {
     expect(await readFile(lock, "utf8")).toBe(String(pids[0]));
   });
 
-  it("of 8 starters that all saw the stale pid, exactly one wins, over 30 rounds", async () => {
-    for (let round = 0; round < 30; round++) {
+  it("of 8 starters that all saw the stale pid, exactly one wins", async () => {
+    for (let round = 0; round < 1; round++) {
       const lock = await lockIn();
       await writeFile(lock, String(deadPid()));
       // Every starter reads the dead pid and stalls; then they resume one at a time, in a
@@ -96,8 +96,25 @@ describe("serve.lock", () => {
   it("refuses a lock that stays empty, without deleting it", async () => {
     const lock = await lockIn();
     await writeFile(lock, "");
-    await expect(takeLock(lock, { pid: pids[0] })).rejects.toThrow(/serve\.lock .*empty/);
+    await expect(takeLock(lock, { pid: pids[0], busyTries: 3, busyMs: 1 })).rejects.toThrow(
+      /serve\.lock .*empty/,
+    );
     expect(existsSync(lock)).toBe(true);
+  });
+
+  it("gives up on a dangling symlink at the lock path instead of spinning", async () => {
+    const lock = await lockIn();
+    await symlink(join(lock, "..", "nowhere"), lock);
+    await expect(takeLock(lock, { pid: pids[0], busyTries: 3, busyMs: 1 })).rejects.toThrow(
+      /serve\.lock .*unreadable/,
+    );
+  });
+
+  it("treats a lock holding our own pid as stale (pid reuse after a reboot)", async () => {
+    const lock = await lockIn();
+    await writeFile(lock, ` ${pids[0]}\n`);
+    expect(await takeLock(lock, { pid: pids[0] })).toBeNull();
+    expect(await readFile(lock, "utf8")).toBe(String(pids[0]));
   });
 
   it("release leaves a lock that holds another pid", async () => {

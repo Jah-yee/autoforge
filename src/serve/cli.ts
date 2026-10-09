@@ -10,7 +10,7 @@ import { DockerSandbox } from "../docker.js";
 import { ConfigError, loadConfig, readEnvFile, readSecrets, type Config } from "./config.js";
 import { Daemon, type RunSummary } from "./daemon.js";
 import { LinearClient } from "./linear.js";
-import { lockHeld, releaseLock, takeLock } from "./lock.js";
+import { lockHeld, readPid, releaseLock, takeLock } from "./lock.js";
 import { installService, uninstallService } from "./service.js";
 import { startStatusServer } from "./status.js";
 
@@ -22,6 +22,8 @@ export type CliIo = {
   signal?: AbortSignal;
   /** Used for Linear and for `status`. */
   fetch?: typeof fetch;
+  /** How long serve waits after taking the lock before re-checking it. Default 250 ms. */
+  settleMs?: number;
 };
 
 const USAGE = `Usage:
@@ -72,8 +74,17 @@ async function serve(dir: string, io: CliIo): Promise<number> {
   const config = await loadConfig(dir);
   const { linearApiKey } = readSecrets(config, env);
   const lock = join(dir, "serve.lock");
-  const holder = await takeLock(lock);
-  if (holder) {
+  let holder: number | string | null = await takeLock(lock);
+  if (holder === null) {
+    // A starter that read the old dead pid can still move our fresh lock aside and, if a third
+    // starter links meanwhile, fail to put it back. Let such races land before touching state.
+    // ponytail: a starter stalled mid-takeover for longer than settleMs can still displace us
+    // later; the loop check then stops us after at most one tick. Airtight needs a kernel lock
+    // (flock), which Node does not expose.
+    await sleep(io.settleMs ?? 250);
+    if (!(await lockHeld(lock))) holder = (await readPid(lock)) || "unknown";
+  }
+  if (holder !== null) {
     io.err(`autoforge serve is already running (pid ${holder}).`);
     return 1;
   }

@@ -7,18 +7,20 @@ export type LockOptions = {
   pid?: number;
   /** Test seam: awaited between steps to force an interleaving. */
   pause?: (step: "read") => Promise<void>;
+  /** How often, and how far apart, to retry a lock that is empty or unreadable. */
+  busyTries?: number;
+  busyMs?: number;
 };
 
-const BUSY_TRIES = 40;
-const BUSY_MS = 50;
-
 const code = (e: unknown) => (e as NodeJS.ErrnoException).code;
-const readPid = async (path: string) => {
+/** The pid in a lock file: null when there is none, NaN when it is empty or garbled. */
+export const readPid = async (path: string) => {
   const text = await readFile(path, "utf8").catch((e: unknown) => {
     if (code(e) === "ENOENT") return null;
     throw e;
   });
-  return text === null ? null : /^\d+$/.test(text) ? Number(text) : NaN;
+  if (text === null) return null;
+  return /^\d+$/.test(text.trim()) ? Number(text.trim()) : NaN;
 };
 
 /**
@@ -28,9 +30,11 @@ const readPid = async (path: string) => {
  */
 export async function takeLock(path: string, o: LockOptions = {}): Promise<number | null> {
   const self = o.pid ?? process.pid;
+  // ponytail: a SIGKILL mid-call leaves `serve.lock.*.tmp` or `serve.lock.stale-*` behind;
+  // they are harmless and safe to delete.
   const temp = `${path}.${randomUUID()}.tmp`;
-  await writeFile(temp, String(self), { flag: "wx", mode: 0o600 });
   try {
+    await writeFile(temp, String(self), { flag: "wx", mode: 0o600 });
     let busy = 0;
     for (;;) {
       try {
@@ -41,19 +45,19 @@ export async function takeLock(path: string, o: LockOptions = {}): Promise<numbe
       }
       const pid = await readPid(path);
       await o.pause?.("read");
-      if (pid === null) continue; // removed meanwhile
-      if (!(pid > 0)) {
-        // Empty or garbled: links make that rare, but a hand-written or truncated lock waits.
-        if (++busy >= BUSY_TRIES)
+      if (pid === null || !(pid > 0)) {
+        // Gone meanwhile, hand-written empty, or a dangling symlink: wait, but not forever.
+        if (++busy >= (o.busyTries ?? 40))
           throw new Error(
             `${path} stays empty or unreadable; delete it if no autoforge serve is running.`,
           );
-        await sleep(BUSY_MS);
+        await sleep(o.busyMs ?? 50);
         continue;
       }
-      // ponytail: a pid reused after a reboot keeps a dead daemon's lock looking live, so serve
-      // refuses to start; delete serve.lock by hand. A boot id in the lock would close that.
-      if (pid === self || alive(pid)) return pid;
+      // Our own pid in a lock we have not taken yet is a dead daemon's whose pid we reused.
+      // ponytail: a pid reused after a reboot by another process keeps a dead daemon's lock
+      // looking live, so serve refuses to start; delete serve.lock by hand. A boot id would fix it.
+      if (pid !== self && alive(pid)) return pid;
       const aside = `${path}.stale-${randomUUID()}`;
       try {
         await rename(path, aside);
@@ -61,13 +65,16 @@ export async function takeLock(path: string, o: LockOptions = {}): Promise<numbe
         if (code(e) === "ENOENT") continue; // another starter moved it
         throw e;
       }
-      // We may have moved a racer's fresh lock instead of the dead one: put it back. If a third
-      // starter linked a lock in the meantime, the racer's backstop (lockHeld) stops it.
-      if ((await readPid(aside)) !== pid)
-        await link(aside, path).catch((e: unknown) => {
-          if (code(e) !== "EEXIST") throw e;
-        });
-      await rm(aside, { force: true });
+      try {
+        // We may have moved a racer's fresh lock instead of the dead one: put it back. If a
+        // third starter linked a lock meanwhile, serve's settle re-check stops the racer.
+        if ((await readPid(aside)) !== pid)
+          await link(aside, path).catch((e: unknown) => {
+            if (code(e) !== "EEXIST") throw e;
+          });
+      } finally {
+        await rm(aside, { force: true });
+      }
     }
   } finally {
     await rm(temp, { force: true });
@@ -83,7 +90,7 @@ export async function releaseLock(path: string, pid = process.pid): Promise<void
   // ponytail: read-then-unlink is not atomic. If, between the two calls, a starter that saw an
   // older dead pid moves our lock aside, we unlink nothing and it restores our lock, which the
   // next start finds dead and takes over. If a third starter links its lock in that same gap,
-  // we unlink that one and the third's backstop (lockHeld) stops it.
+  // we unlink that one and the third's loop check (lockHeld) stops it.
   if (await lockHeld(path, pid)) await rm(path, { force: true });
 }
 
