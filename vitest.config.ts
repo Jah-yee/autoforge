@@ -1,3 +1,6 @@
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 
-export default defineConfig({ test: { testTimeout: 30_000 } });
+// apps/desktop has its own Vitest setup (jsdom) and runs its tests itself.
+export default defineConfig({
+  test: { testTimeout: 30_000, exclude: [...configDefaults.exclude, "apps/**"] },
+});
