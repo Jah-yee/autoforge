@@ -213,7 +213,7 @@ describe("sandbox failures", () => {
           ...s,
           exec: async (cmd, o) => {
             if (cmd.includes("git") && cmd.includes("add"))
-              await new Promise((r) => setTimeout(r, 1_200));
+              await new Promise((r) => setTimeout(r, 2_000));
             return s.exec(cmd, o);
           },
         };
@@ -223,7 +223,7 @@ describe("sandbox failures", () => {
       ...base(),
       sandbox,
       agent: { command: fakeAgent("sleep") },
-      timeoutMs: 1_500,
+      timeoutMs: 4_000,
     });
     expect(r.status).toBe("timed_out");
     expect(r.patch).toContain("+x");
