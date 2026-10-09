@@ -73,6 +73,7 @@ export class Daemon {
   private sending: Promise<void> = Promise.resolve();
   private failures = 0;
   private retryAfterMs: number | undefined;
+  private dockerDown = false;
 
   constructor(private readonly o: DaemonOptions) {
     this.secrets = readSecrets(o.config, o.env);
@@ -88,9 +89,17 @@ export class Daemon {
 
   async start(): Promise<void> {
     await mkdir(this.o.stateDir, { recursive: true, mode: 0o700 });
-    const { state } = await loadState(this.o.stateDir, this.now());
+    const { state, corruptPath } = await loadState(this.o.stateDir, this.now());
     this.state = state;
+    if (corruptPath) {
+      this.log(
+        "error",
+        "state_corrupt",
+        `state.json was unreadable; moved it to ${corruptPath} and started fresh`,
+      );
+    }
     this.state.viewerId = (await this.o.linear.viewer()).id;
+    await this.recover();
     await this.save();
   }
 
@@ -130,6 +139,7 @@ export class Daemon {
         if (Date.parse(issue.updatedAt) > Date.parse(cursor)) cursor = issue.updatedAt;
       }
       this.state.cursor = cursor;
+      await this.expire();
       await this.schedule();
     } catch (e) {
       this.log("error", "tick_failed", errorMessage(e));
@@ -174,7 +184,7 @@ export class Daemon {
         issue.labels.some((l) => l.toLowerCase() === label.toLowerCase()));
     const open = issue.stateType !== "completed" && issue.stateType !== "canceled";
     if (entry && picked && open) return this.handleComments(issue, entry);
-    if (entry) return; // an issue already in state is never picked up twice
+    if (entry) return this.release(issue.id, entry, picked);
     if (picked && open) await this.pickUp(issue);
   }
 
@@ -207,6 +217,62 @@ export class Daemon {
     await this.post(issue.id, `Queued for autoforge (position ${this.position(issue.id)}).`, true);
   }
 
+  /** After a restart: re-queue an interrupted run once, and hand an interrupted publish back. */
+  private async recover(): Promise<void> {
+    for (const [id, e] of Object.entries(this.state.issues)) {
+      if (e.status === "running" && e.interruptions >= 1) {
+        this.set(e, { status: "failed" });
+        await this.post(
+          id,
+          `autoforge was interrupted twice while running this issue and stopped trying.\n\n${RETRY_HINT}`,
+          true,
+        );
+      } else if (e.status === "running") {
+        this.set(e, { status: "queued", interruptions: e.interruptions + 1 });
+        await this.post(id, "autoforge restarted during the run, so the issue is queued again.");
+      } else if (e.status === "publishing") {
+        this.set(e, { status: "awaiting_approval" });
+        await this.post(
+          id,
+          "autoforge restarted while publishing, so the pull request may or may not have been opened. Reply `/publish` to try again; if the branch already exists the reply says so, and `/publish force` overwrites it.",
+        );
+      }
+    }
+  }
+
+  /** The issue no longer matches pickup (unassigned, label removed) or was closed. */
+  private async release(id: string, entry: IssueEntry, picked: boolean): Promise<void> {
+    const why = "the issue was unassigned, lost its pickup label or was closed";
+    if (entry.status === "queued") {
+      delete this.state.issues[id];
+      await this.post(id, `Removed from the autoforge queue: ${why}.`);
+    } else if (entry.status === "running") {
+      const job = this.jobs.get(id);
+      if (job) {
+        job.dropped = true;
+        job.abort.abort();
+      }
+      delete this.state.issues[id];
+      await this.post(id, `autoforge stopped the run: ${why}.`);
+    } else if (!picked && entry.status !== "publishing") {
+      // Forgetting the entry is what lets "remove the label, add it again" start over.
+      delete this.state.issues[id];
+      await this.save();
+      if (entry.run) await deletePatch(this.o.stateDir, entry.run.id);
+    }
+  }
+
+  private async expire(): Promise<void> {
+    const days = this.o.config.approvalExpiryDays;
+    for (const [id, e] of Object.entries(this.state.issues)) {
+      if (e.status !== "awaiting_approval" || this.age(e) <= days * DAY) continue;
+      this.set(e, { status: "discarded" });
+      await this.save();
+      if (e.run) await deletePatch(this.o.stateDir, e.run.id);
+      await this.post(id, `Discarded: no reply within ${days} days.`);
+    }
+  }
+
   /** Queued entries, oldest first. */
   private queue(): [string, IssueEntry][] {
     return Object.entries(this.state.issues)
@@ -219,11 +285,23 @@ export class Daemon {
   }
 
   private async schedule(): Promise<void> {
+    const { maxConcurrent, dailyRunLimit } = this.o.config;
     const today = localDate(this.now());
     if (this.state.dailyRuns.date !== today) this.state.dailyRuns = { date: today, count: 0 };
     for (const [id, e] of this.queue()) {
       if (this.jobs.has(id)) continue; // an aborted run for this issue is still winding down
-      if (this.jobs.size >= this.o.config.maxConcurrent) return;
+      // While Docker is down, a single run at a time probes it.
+      if (this.jobs.size >= maxConcurrent || (this.dockerDown && this.jobs.size > 0)) return;
+      if (this.state.dailyRuns.count >= dailyRunLimit) {
+        if (e.waiting !== "limit") {
+          e.waiting = "limit";
+          await this.post(
+            id,
+            `The daily run limit (${dailyRunLimit}) is reached. This issue stays queued and starts tomorrow.`,
+          );
+        }
+        continue;
+      }
       this.startRun(id, e);
     }
   }
@@ -282,6 +360,8 @@ export class Daemon {
 
   /** Called once the sandbox exists and the clone starts. */
   private async announce(id: string, entry: IssueEntry, repo: string, ref: string): Promise<void> {
+    this.dockerDown = false;
+    entry.waiting = undefined;
     await this.o.linear
       .moveToStarted(id)
       .catch((e) => this.log("warn", "move_failed", errorMessage(e), entry.identifier));
@@ -302,6 +382,21 @@ export class Daemon {
         `autoforge could not start the run: ${result.message}\n\n${RETRY_HINT}`,
         true,
       );
+      return;
+    }
+    if (result.reason === "sandbox_unavailable") {
+      this.dockerDown = true;
+      this.state.dailyRuns.count = Math.max(0, this.state.dailyRuns.count - 1);
+      this.set(entry, { status: "queued" });
+      this.log("warn", "docker_unavailable", result.message ?? "", entry.identifier);
+      for (const [qid, q] of this.queue()) {
+        if (q.waiting === "docker") continue;
+        q.waiting = "docker";
+        await this.post(
+          qid,
+          "Waiting for Docker: it is not running. The run starts by itself once Docker is back.",
+        );
+      }
       return;
     }
     if (result.status === "changed") await writePatch(this.o.stateDir, result.id, result.patch);
@@ -325,7 +420,7 @@ export class Daemon {
     for (const c of issue.comments) {
       if (entry.handledCommentIds.includes(c.id) || c.user?.id !== this.state.viewerId) continue;
       const gate = entry.lastResultCommentAt;
-      if (!gate || Date.parse(c.createdAt) <= Date.parse(gate)) continue;
+      if (!gate || !(Date.parse(c.createdAt) > Date.parse(gate))) continue; // unparsable dates fail closed
       const command = parseCommand(c.body);
       if (!command) continue;
       entry.handledCommentIds.push(c.id);
@@ -390,12 +485,13 @@ export class Daemon {
     this.set(entry, { status: "publishing" });
     const done = (async () => {
       await this.save(); // before the push, so a crash never repeats a publish silently
+      let out;
       try {
         const patch = entry.run ? await readPatch(this.o.stateDir, entry.run.id) : null;
         if (!entry.run || patch === null) {
           throw new PublishError("invalid_result", "the stored patch is missing");
         }
-        const out = await publishToGitHub(
+        out = await publishToGitHub(
           { ...entry.run, patch, logs: "" },
           {
             repo: entry.repo,
@@ -408,14 +504,6 @@ export class Daemon {
             signal: this.stopping.signal,
           },
         );
-        this.set(entry, { status: "published", prUrl: out.prUrl });
-        await this.save();
-        await deletePatch(this.o.stateDir, entry.run.id);
-        this.log("info", "published", out.prUrl, entry.identifier);
-        await this.post(id, `Draft PR opened: ${out.prUrl}`);
-        await this.o.linear
-          .attachUrl(id, out.prUrl, "Draft PR (autoforge)")
-          .catch((e) => this.log("warn", "attach_failed", errorMessage(e), entry.identifier));
       } catch (e) {
         if (this.stopping.signal.aborted) return; // stays "publishing"; the next start hands it back
         const code = e instanceof PublishError ? e.code : "error";
@@ -426,7 +514,22 @@ export class Daemon {
         this.set(entry, { status: "awaiting_approval" });
         this.log("warn", "publish_failed", `${code}: ${errorMessage(e)}`, entry.identifier);
         await this.post(id, `Publishing failed (\`${code}\`): ${errorMessage(e)}\n\n${hint}`);
+        await this.save();
+        return;
       }
+      // The PR exists: nothing below may move the entry back from "published".
+      this.set(entry, { status: "published", prUrl: out.prUrl });
+      await this.save();
+      this.log("info", "published", out.prUrl, entry.identifier);
+      try {
+        if (entry.run) await deletePatch(this.o.stateDir, entry.run.id);
+      } catch (e) {
+        this.log("warn", "cleanup_failed", errorMessage(e), entry.identifier);
+      }
+      await this.post(id, `Draft PR opened: ${out.prUrl}`);
+      await this.o.linear
+        .attachUrl(id, out.prUrl, "Draft PR (autoforge)")
+        .catch((e) => this.log("warn", "attach_failed", errorMessage(e), entry.identifier));
       await this.save();
     })()
       .catch((e) => this.log("error", "publish_handler_failed", errorMessage(e), entry.identifier))
