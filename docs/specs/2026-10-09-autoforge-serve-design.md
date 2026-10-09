@@ -61,10 +61,12 @@ All new code lives in `src/serve/`. Each unit has one job.
 ```ts
 interface LinearApi {
   viewer(): Promise<{ id: string; name: string }>;
-  // Issues assigned to the viewer, updated after `since`, with labels, team, project, state
-  // and comments created after `since`. Paginated internally.
-  changedIssues(since: string): Promise<LinearIssue[]>;
-  comment(issueId: string, body: string): Promise<{ id: string }>;
+  // Issues assigned to the viewer and updated after `since`, PLUS the issues in `trackedIds`
+  // whatever their assignee (so unassignment is visible), with labels, team, project, state,
+  // assignee and comments created after `since`. Paginated internally.
+  changedIssues(since: string, trackedIds: string[]): Promise<LinearIssue[]>;
+  // createdAt is Linear's clock; the command gate compares against it, never the local clock.
+  comment(issueId: string, body: string): Promise<{ id: string; createdAt: string }>;
   moveToStarted(issueId: string): Promise<void>;     // first workflow state of type "started"
   attachUrl(issueId: string, url: string, title: string): Promise<void>;
 }
@@ -125,8 +127,10 @@ Read from the environment only, never from `config.json`:
 - `CLONE_TOKEN` (optional): read-only token for cloning private repos inside the sandbox.
 - Every name in `agent.envFrom` (for example `ANTHROPIC_API_KEY`).
 
-The service unit loads them from `~/.autoforge/env` (`KEY=value` lines). The daemon refuses to
-start if that file exists and is readable or writable by group or others (mode must be `600`).
+`autoforge serve` reads `~/.autoforge/env` (`KEY=value` lines) itself with `util.parseEnv`, after
+checking its mode; values already in the process environment win. The file is never executed by a
+shell. The daemon refuses to start if that file exists and is readable or writable by group or
+others (mode must be `600`).
 
 ## 4. Routing and task text
 
@@ -308,10 +312,11 @@ The service unit redirects them to `~/.autoforge/daemon.log`.
 ## 10. Service install (`service.ts`)
 
 - macOS: writes `~/Library/LaunchAgents/dev.autoforge.serve.plist` (`RunAtLoad`, `KeepAlive`,
-  stdout and stderr to `~/.autoforge/daemon.log`, env loaded by a small wrapper that sources
-  `~/.autoforge/env`), then `launchctl bootstrap gui/<uid>`.
-- Linux: writes `~/.config/systemd/user/autoforge.service` (`EnvironmentFile=%h/.autoforge/env`,
-  `Restart=on-failure`), then `systemctl --user daemon-reload` and `enable --now`.
+  stdout and stderr to `~/.autoforge/daemon.log`, `PATH` captured from the installing shell so
+  `docker` and `git` resolve), then `launchctl bootstrap gui/<uid>`. Secrets are not in the plist;
+  `autoforge serve` reads `~/.autoforge/env` itself.
+- Linux: writes `~/.config/systemd/user/autoforge.service` (`Environment=PATH=<installer PATH>`,
+  `Restart=on-failure`; no `EnvironmentFile`, the daemon reads `~/.autoforge/env` itself), then `systemctl --user daemon-reload` and `enable --now`.
 - `uninstall` stops and removes the unit. Neither command touches `~/.autoforge` data.
 - The unit text is produced by pure functions so it can be tested without installing.
 
