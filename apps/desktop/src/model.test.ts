@@ -74,6 +74,35 @@ describe("groupRuns", () => {
   });
 });
 
+describe("ordering robustness", () => {
+  it("sorts a run with an unreadable updatedAt last instead of scrambling the group", () => {
+    const g = groupRuns(
+      [
+        run("a-new", { status: "awaiting_approval", updatedAt: ago(2 * MIN) }),
+        run("bad", { status: "awaiting_approval", updatedAt: "nope" }),
+        run("a-old", { status: "awaiting_approval", updatedAt: ago(9 * MIN) }),
+      ],
+      NOW,
+    );
+    expect(g.awaiting.map((r) => r.issueId)).toEqual(["a-new", "a-old", "bad"]);
+  });
+
+  it("orders the queue by parsed time, keeps ties in input order, unreadable first", () => {
+    const t = ago(5 * MIN);
+    const offset = new Date(NOW - 3 * MIN).toISOString().replace("Z", "+00:00");
+    const g = groupRuns(
+      [
+        run("late", { queuedAt: offset }),
+        run("tie1", { queuedAt: t }),
+        run("tie2", { queuedAt: t }),
+        run("bad", { queuedAt: "nope" }),
+      ],
+      NOW,
+    );
+    expect(g.queued.map((r) => r.issueId)).toEqual(["bad", "tie1", "tie2", "late"]);
+  });
+});
+
 describe("relativeTime", () => {
   it("counts seconds, minutes, hours and days", () => {
     expect(relativeTime(0)).toBe("just now");
@@ -88,6 +117,7 @@ describe("relativeTime", () => {
   it("says just now for a clock in the future or an unreadable time", () => {
     expect(relativeTime(-90_000)).toBe("just now");
     expect(relativeTime(Number.NaN)).toBe("just now");
+    expect(relativeTime(Number.POSITIVE_INFINITY)).toBe("just now");
   });
 });
 

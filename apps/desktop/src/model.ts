@@ -51,7 +51,9 @@ const FINISHED: RunStatus[] = ["published", "no_changes", "failed", "timed_out",
 const WEEK = 7 * 86_400_000;
 const RECENT_LIMIT = 20;
 
-const newestFirst = (a: Run, b: Run) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt);
+/** Epoch ms, 0 when unreadable, so comparators never return NaN. */
+const ms = (iso: string) => Date.parse(iso) || 0;
+const newestFirst = (a: Run, b: Run) => ms(b.updatedAt) - ms(a.updatedAt);
 
 /** The popover's groups. Statuses this app does not know (a newer daemon) are left out. */
 export function groupRuns(runs: Run[], now: number): Groups {
@@ -59,8 +61,8 @@ export function groupRuns(runs: Run[], now: number): Groups {
   return {
     awaiting: having("awaiting_approval").sort(newestFirst),
     running: having("running", "publishing").sort(newestFirst),
-    // ISO timestamps sort as strings; the daemon orders its queue the same way.
-    queued: having("queued").sort((a, b) => a.queuedAt.localeCompare(b.queuedAt)),
+    // Array.prototype.sort is stable, so equal queuedAt keeps the daemon's order.
+    queued: having("queued").sort((a, b) => ms(a.queuedAt) - ms(b.queuedAt)),
     recent: having(...FINISHED)
       .filter((r) => now - Date.parse(r.updatedAt) <= WEEK)
       .sort(newestFirst)
@@ -70,7 +72,7 @@ export function groupRuns(runs: Run[], now: number): Groups {
 
 export function relativeTime(ms: number): string {
   const s = Math.floor(ms / 1000);
-  if (!(s >= 5)) return "just now"; // also NaN and a clock behind the daemon's
+  if (!(s >= 5) || !Number.isFinite(s)) return "just now"; // also NaN, Infinity and a clock behind the daemon's
   if (s < 60) return `${s} s ago`;
   const m = Math.floor(s / 60);
   if (m < 60) return `${m} min ago`;
