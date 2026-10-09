@@ -52,6 +52,17 @@ const RETRY_HINT = "Reply `/retry <feedback>` to run it again with your feedback
 
 export type CommandOutcome = { ok: boolean; message: string };
 
+export type RunSummary = {
+  issueId: string;
+  identifier: string;
+  status: IssueStatus;
+  repo: string;
+  ref: string;
+  queuedAt: string;
+  updatedAt: string;
+  prUrl?: string;
+};
+
 const VALID_WHEN: Record<Command["kind"], string> = {
   publish: "while a result is waiting for approval",
   discard: "while a result is waiting for approval",
@@ -164,6 +175,30 @@ export class Daemon {
     await this.save();
   }
 
+  /** Issues in state, for the status endpoint. No patches, no logs. */
+  runs(): RunSummary[] {
+    return Object.entries(this.state.issues).map(([issueId, e]) => ({
+      issueId,
+      identifier: e.identifier,
+      status: e.status,
+      repo: e.repo,
+      ref: e.ref,
+      queuedAt: e.queuedAt,
+      updatedAt: e.updatedAt,
+      ...(e.prUrl ? { prUrl: e.prUrl } : {}),
+    }));
+  }
+
+  async patch(issueId: string): Promise<string | null> {
+    const run = this.entryOf(issueId)?.run;
+    return run ? readPatch(this.o.stateDir, run.id) : null;
+  }
+
+  /** A command from the status endpoint: the same checks as a Linear comment, no reply on a wrong state. */
+  async command(issueId: string, command: Command): Promise<CommandOutcome | null> {
+    return this.apply(issueId, command, false);
+  }
+
   private tracked(e: IssueEntry): boolean {
     if (ACTIVE.includes(e.status)) return true;
     // ponytail: finished runs stay tracked for approvalExpiryDays so a late /retry is seen;
@@ -258,7 +293,7 @@ export class Daemon {
       // Forgetting the entry is what lets "remove the label, add it again" start over.
       delete this.state.issues[id];
       await this.save();
-      if (entry.run) await deletePatch(this.o.stateDir, entry.run.id);
+      if (entry.run) await this.dropPatch(entry.run.id, entry.identifier);
     }
   }
 
@@ -268,8 +303,17 @@ export class Daemon {
       if (e.status !== "awaiting_approval" || this.age(e) <= days * DAY) continue;
       this.set(e, { status: "discarded" });
       await this.save();
-      if (e.run) await deletePatch(this.o.stateDir, e.run.id);
+      if (e.run) await this.dropPatch(e.run.id, e.identifier);
       await this.post(id, `Discarded: no reply within ${days} days.`);
+    }
+  }
+
+  /** The state already says the patch is unneeded, so a failed delete is only logged. */
+  private async dropPatch(runId: string, identifier: string): Promise<void> {
+    try {
+      await deletePatch(this.o.stateDir, runId);
+    } catch (e) {
+      this.log("warn", "cleanup_failed", errorMessage(e), identifier);
     }
   }
 
@@ -287,7 +331,12 @@ export class Daemon {
   private async schedule(): Promise<void> {
     const { maxConcurrent, dailyRunLimit } = this.o.config;
     const today = localDate(this.now());
-    if (this.state.dailyRuns.date !== today) this.state.dailyRuns = { date: today, count: 0 };
+    if (this.state.dailyRuns.date !== today) {
+      this.state.dailyRuns = { date: today, count: 0 };
+      // A new day: a still-limited issue gets a fresh comment.
+      for (const e of Object.values(this.state.issues))
+        if (e.waiting === "limit") e.waiting = undefined;
+    }
     for (const [id, e] of this.queue()) {
       if (this.jobs.has(id)) continue; // an aborted run for this issue is still winding down
       // While Docker is down, a single run at a time probes it.
@@ -459,7 +508,7 @@ export class Daemon {
     if (command.kind === "discard") {
       this.set(entry, { status: "discarded" });
       await this.save();
-      if (patchOf) await deletePatch(this.o.stateDir, patchOf);
+      if (patchOf) await this.dropPatch(patchOf, entry.identifier);
       await this.post(issueId, "Discarded. Nothing was published.");
       return { ok: true, message: "discarded" };
     }
@@ -471,7 +520,7 @@ export class Daemon {
       waiting: undefined,
     });
     await this.save();
-    if (patchOf) await deletePatch(this.o.stateDir, patchOf);
+    if (patchOf) await this.dropPatch(patchOf, entry.identifier);
     const why = command.feedback ? " with your feedback" : "";
     await this.post(
       issueId,

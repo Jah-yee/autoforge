@@ -127,6 +127,47 @@ describe("daemon lifecycle", () => {
     expect(state.dailyRuns.count).toBe(1);
   });
 
+  it("says the daily limit again on a new day for an issue that is still limited", async () => {
+    const h = await setup({ config: { dailyRunLimit: 1 } });
+    for (const n of [1, 2, 3]) h.linear.addIssue({ id: `issue-${n}` });
+    const d = h.make();
+    await d.start();
+    await step(d);
+    await step(d);
+    const limit =
+      "The daily run limit (1) is reached. This issue stays queued and starts tomorrow.";
+    expect(h.linear.said("issue-3")).toEqual(["Queued for autoforge (position 3).", limit]);
+    h.clock.advance(DAY);
+    await step(d);
+    await step(d);
+    expect((await readState(h.dir)).issues["issue-2"]?.status).toBe("awaiting_approval");
+    expect(h.linear.said("issue-3")).toEqual(["Queued for autoforge (position 3).", limit, limit]);
+  });
+
+  it.skipIf(process.getuid?.() === 0)(
+    "still comments and carries on when an expired patch cannot be deleted",
+    async () => {
+      const h = await setup({ config: { maxConcurrent: 2 } });
+      h.linear.addIssue({ id: "issue-1" });
+      h.linear.addIssue({ id: "issue-2" });
+      const d = h.make();
+      await d.start();
+      await step(d);
+      h.clock.advance(15 * DAY);
+      await chmod(join(h.dir, "patches"), 0o500);
+      try {
+        await step(d);
+      } finally {
+        await chmod(join(h.dir, "patches"), 0o700);
+      }
+      for (const id of ["issue-1", "issue-2"]) {
+        expect(h.linear.said(id).at(-1)).toBe("Discarded: no reply within 14 days.");
+        expect((await readState(h.dir)).issues[id]?.status).toBe("discarded");
+      }
+      expect(h.logs).toContainEqual(expect.objectContaining({ event: "cleanup_failed" }));
+    },
+  );
+
   it("pauses the queue while Docker is down, says so once per issue, and resumes", async () => {
     const h = await setup();
     const sandbox = new FlakySandbox();
@@ -223,26 +264,29 @@ describe("daemon lifecycle", () => {
     expect(state.viewerId).toBe(ME.id);
     expect(state.issues["issue-1"]?.status).toBe("awaiting_approval");
   });
-  it("keeps an entry published when cleanup after a successful publish fails", async () => {
-    const h = await setup();
-    h.linear.addIssue({ id: "issue-1" });
-    const d = h.make();
-    await d.start();
-    await step(d);
-    h.linear.attachUrl = async () => {
-      throw new Error("attach down");
-    };
-    await chmod(join(h.dir, "patches"), 0o500); // the patch can be read but not deleted
-    try {
-      h.reply("issue-1", "/publish");
+  it.skipIf(process.getuid?.() === 0)(
+    "keeps an entry published when cleanup after a successful publish fails",
+    async () => {
+      const h = await setup();
+      h.linear.addIssue({ id: "issue-1" });
+      const d = h.make();
+      await d.start();
       await step(d);
-    } finally {
-      await chmod(join(h.dir, "patches"), 0o700);
-    }
-    expect((await readState(h.dir)).issues["issue-1"]?.status).toBe("published");
-    expect(h.linear.said("issue-1").some((s) => s.startsWith("Publishing failed"))).toBe(false);
-    expect(h.logs).toContainEqual(expect.objectContaining({ event: "cleanup_failed" }));
-  });
+      h.linear.attachUrl = async () => {
+        throw new Error("attach down");
+      };
+      await chmod(join(h.dir, "patches"), 0o500); // the patch can be read but not deleted
+      try {
+        h.reply("issue-1", "/publish");
+        await step(d);
+      } finally {
+        await chmod(join(h.dir, "patches"), 0o700);
+      }
+      expect((await readState(h.dir)).issues["issue-1"]?.status).toBe("published");
+      expect(h.linear.said("issue-1").some((s) => s.startsWith("Publishing failed"))).toBe(false);
+      expect(h.logs).toContainEqual(expect.objectContaining({ event: "cleanup_failed" }));
+    },
+  );
 
   it("does not accept a command whose createdAt does not parse", async () => {
     const h = await setup();
