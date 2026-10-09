@@ -58,6 +58,7 @@ export class Daemon {
   private readonly latest = new Map<string, LinearIssue>();
   private readonly stopping = new AbortController();
   private saving: Promise<void> = Promise.resolve();
+  private sending: Promise<void> = Promise.resolve();
   private failures = 0;
   private retryAfterMs: number | undefined;
 
@@ -128,6 +129,7 @@ export class Daemon {
   /** Resolves once no run is in flight. */
   async idle(): Promise<void> {
     while (this.jobs.size) await Promise.all([...this.jobs.values()].map((j) => j.done));
+    await this.sending;
     await this.saving;
   }
 
@@ -299,38 +301,52 @@ export class Daemon {
       result.reason ? `${result.status} (${result.reason})` : result.status,
       entry.identifier,
     );
-    await this.post(id, resultComment(result, entry), true);
+    this.enqueue(id, resultComment(result, entry), true);
+    await this.save();
+    await this.flushOutbox();
   }
 
-  /** Posts a daemon comment. A failure goes to the outbox. `gate` moves the command window. */
+  /** Queues a daemon comment, saves state, then sends. `gate` moves the command window. */
   private async post(issueId: string, text: string, gate = false): Promise<void> {
-    const body = `${MARKER}\n${this.mask(text)}`;
-    try {
-      const c = await this.o.linear.comment(issueId, body);
-      if (gate) this.gate(issueId, c.createdAt);
-    } catch (e) {
-      this.state.outbox.push({ issueId, body, gate, attempts: 1 });
-      this.log(
-        "warn",
-        "comment_failed",
-        `${errorMessage(e)}; will retry`,
-        this.state.issues[issueId]?.identifier,
-      );
-    }
+    this.enqueue(issueId, text, gate);
+    await this.save();
+    await this.flushOutbox();
   }
 
-  private async flushOutbox(): Promise<void> {
-    const pending = this.state.outbox;
-    this.state.outbox = [];
-    for (const item of pending) {
+  /** Intent first: the comment is in state before any HTTP call, so a crash never loses or repeats work. */
+  private enqueue(issueId: string, text: string, gate: boolean): void {
+    this.state.outbox.push({ issueId, body: `${MARKER}\n${this.mask(text)}`, gate, attempts: 0 });
+  }
+
+  /** Sends pending comments in insertion order; a failure holds back later ones for that issue. */
+  private flushOutbox(): Promise<void> {
+    this.sending = this.sending.then(() => this.sendAll()).catch(() => undefined);
+    return this.sending;
+  }
+
+  private async sendAll(): Promise<void> {
+    const blocked = new Set<string>();
+    for (const item of [...this.state.outbox]) {
+      if (blocked.has(item.issueId)) continue;
       try {
         const c = await this.o.linear.comment(item.issueId, item.body);
+        this.state.outbox = this.state.outbox.filter((i) => i !== item);
         if (item.gate) this.gate(item.issueId, c.createdAt);
-      } catch {
+      } catch (e) {
+        blocked.add(item.issueId);
         item.attempts++;
-        if (item.attempts <= 100) this.state.outbox.push(item);
-        else this.log("error", "comment_dropped", "gave up on a comment after 100 attempts");
+        this.log(
+          "warn",
+          "comment_failed",
+          `${errorMessage(e)}; will retry`,
+          this.state.issues[item.issueId]?.identifier,
+        );
+        if (item.attempts >= 100) {
+          this.state.outbox = this.state.outbox.filter((i) => i !== item);
+          this.log("error", "comment_dropped", "gave up on a comment after 100 attempts");
+        }
       }
+      await this.save();
     }
   }
 

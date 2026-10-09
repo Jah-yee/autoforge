@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { LinearError } from "../../src/serve/linear.js";
 import { fakeAgent } from "../fake-agent.js";
+import { TempDirSandbox } from "../temp-dir-sandbox.js";
 import { OTHER } from "./fake-linear.js";
 import { ENV, readState, setup, step } from "./harness.js";
 
@@ -239,5 +240,100 @@ describe("daemon core", () => {
     expect(result).toContain("\n````diff\n");
     expect(result).toContain("\n+```\n");
     expect(result).toContain("\n````\n");
+  });
+
+  // Fix round 1: persist intent before every side effect
+  it("saves the final state with the result comment in the outbox before sending it", async () => {
+    const h = await setup();
+    h.linear.addIssue({ id: "issue-1" });
+    const real = h.linear.comment.bind(h.linear);
+    let snapshot: Awaited<ReturnType<typeof readState>> | undefined;
+    let failed = false;
+    h.linear.comment = async (id, body) => {
+      if (body.includes("finished on") && !failed) {
+        failed = true;
+        snapshot = await readState(h.dir);
+        throw new Error("crash");
+      }
+      return real(id, body);
+    };
+    const d = h.make();
+    await d.start();
+    await step(d);
+    expect(snapshot?.issues["issue-1"]?.status).toBe("awaiting_approval");
+    expect(snapshot?.outbox.map((o) => o.body)).toEqual([expect.stringContaining("finished on")]);
+    await step(d);
+    expect(h.linear.said("issue-1").filter((m) => m.includes("finished on"))).toHaveLength(1);
+    expect((await readState(h.dir)).outbox).toEqual([]);
+  });
+
+  it("does not re-run an issue after a crash before the result comment was sent", async () => {
+    const h = await setup();
+    h.linear.addIssue({ id: "issue-1" });
+    const real = h.linear.comment.bind(h.linear);
+    h.linear.comment = async (id, body) => {
+      if (body.includes("finished on")) throw new Error("crash");
+      return real(id, body);
+    };
+    let runs = 0;
+    const sb = new TempDirSandbox();
+    const d1 = h.make({ sandbox: () => (runs++, sb) });
+    await d1.start();
+    await step(d1);
+    expect(runs).toBe(1);
+
+    h.linear.comment = real;
+    const d2 = h.make({ sandbox: () => (runs++, sb) });
+    await d2.start();
+    await step(d2);
+    expect(runs).toBe(1);
+    expect(h.linear.said("issue-1").filter((m) => m.includes("finished on"))).toHaveLength(1);
+    expect((await readState(h.dir)).issues["issue-1"]?.status).toBe("awaiting_approval");
+  });
+
+  it("keeps comments on one issue in order when an older one is still pending", async () => {
+    const h = await setup();
+    h.linear.addIssue({ id: "issue-1" });
+    const real = h.linear.comment.bind(h.linear);
+    let first = true;
+    h.linear.comment = async (id, body) => {
+      if (first) {
+        first = false;
+        throw new Error("blip");
+      }
+      return real(id, body);
+    };
+    const d = h.make();
+    await d.start();
+    await step(d);
+    const said = h.linear.said("issue-1");
+    expect(said[0]).toBe("Queued for autoforge (position 1).");
+    expect(said[1]).toBe("Running on `o/r@main` in a sandbox.");
+    expect(said[2]).toContain("finished on");
+  });
+
+  it("gives the agent only the envFrom variables", async () => {
+    const h = await setup({
+      config: {
+        agent: {
+          image: "unused",
+          command: ["sh", "-c", "env > env.txt"],
+          envFrom: ["ANTHROPIC_API_KEY"],
+        },
+      },
+    });
+    h.linear.addIssue({ id: "issue-1" });
+    const env = { ...ENV, CLONE_TOKEN: "clone_secret_0003", ANTHROPIC_API_KEY: "sk-ant-0004" };
+    const d = h.make({ env });
+    await d.start();
+    await step(d);
+    const patch = await readFile(
+      join(h.dir, "patches", `${(await readState(h.dir)).issues["issue-1"]?.run?.id}.patch`),
+      "utf8",
+    );
+    expect(patch).toContain("ANTHROPIC_API_KEY=");
+    for (const k of ["LINEAR_API_KEY", "GITHUB_TOKEN", "CLONE_TOKEN"]) {
+      expect(patch).not.toContain(`${k}=`);
+    }
   });
 });
