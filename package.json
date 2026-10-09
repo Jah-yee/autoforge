@@ -24,6 +24,9 @@
   "files": [
     "dist"
   ],
+  "bin": {
+    "autoforge": "./dist/serve/cli.js"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json",

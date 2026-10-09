@@ -88,6 +88,83 @@ commit sha), `fetch_failed`, `apply_failed`, `branch_exists` (pass `force: true`
   the `workflows` permission cannot push `.github/workflows` changes.
 - Env values (4+ characters) and tokens are masked as `***` in events and logs.
 
+## autoforge serve: assign a Linear issue, get a PR
+
+`autoforge serve` is a local daemon. It watches Linear for issues assigned to you and labelled
+`autoforge`, runs each one in the Docker sandbox, posts the result on the issue, and opens a
+draft PR when you reply `/publish`.
+
+### Set up
+
+1. Build an agent image, for example `docker build -t autoforge-claude examples`.
+2. Create `~/.autoforge/config.json`:
+
+   ```json
+   {
+     "defaultRepo": "me/app@main",
+     "rules": [{ "linearTeam": "DOCS", "repo": "me/docs" }],
+     "agent": {
+       "image": "autoforge-claude",
+       "command": ["claude", "-p", "{task}", "--dangerously-skip-permissions"],
+       "envFrom": ["ANTHROPIC_API_KEY"]
+     }
+   }
+   ```
+
+   Other fields and their defaults: `pollSeconds` 30 (minimum 10), `maxConcurrent` 1,
+   `dailyRunLimit` 20, `approvalExpiryDays` 14, `pickup` `"labelled"` (or `"all-assigned"`),
+   `label` `"autoforge"`, `comments` `"all"` (or `"mine"`), `agent.timeoutMinutes` 30 and
+   `template` (placeholders `{title}`, `{description}`, `{comments}`). Rules take one of
+   `linearProject` or `linearTeam`, a `repo`, and an optional `agent` override.
+
+3. Put secrets in `~/.autoforge/env` and run `chmod 600 ~/.autoforge/env`:
+
+   ```
+   LINEAR_API_KEY=lin_api_...
+   GITHUB_TOKEN=github_pat_...
+   ANTHROPIC_API_KEY=sk-ant-...
+   ```
+
+   `GITHUB_TOKEN` only pushes from your machine and needs contents and pull requests write.
+   `CLONE_TOKEN` (optional, read-only) clones private repos inside the sandbox.
+
+4. Run `autoforge serve` in a terminal, or `autoforge service install` to start it at login
+   (launchd on macOS, a systemd user unit on Linux; logs go to `~/.autoforge/daemon.log`).
+   `autoforge service uninstall` removes the service and leaves `~/.autoforge` alone.
+
+### Use
+
+Assign an issue to yourself and add the `autoforge` label. autoforge comments "Queued", moves
+the issue to your team's first started state, runs it, and posts a result with the first 80
+lines of the patch. Then reply on the issue:
+
+| Reply               | Effect                                               |
+| :------------------ | :--------------------------------------------------- |
+| `/publish`          | Opens a draft PR and links it on the issue           |
+| `/publish force`    | Same, overwriting an existing branch                 |
+| `/discard`          | Drops the result                                     |
+| `/retry <feedback>` | Runs again with the original task plus your feedback |
+
+Only your own comments count as commands. Results nobody answers are discarded after
+`approvalExpiryDays`. To start an issue over, remove the label and add it again.
+
+The repo comes from a `repo:owner/name` or `repo:owner/name@branch` label, then a project
+rule, then a team rule, then `defaultRepo`.
+
+`autoforge status` lists the issues the daemon knows about. It talks to a status endpoint on
+`127.0.0.1` that needs the token in `~/.autoforge/status.json` and refuses browser requests.
+
+### Security
+
+- Issue text and comments are untrusted: anyone in your workspace can edit them to steer the
+  agent. The agent only runs in the sandbox without your push token, and nothing is pushed
+  until you reply `/publish`. Use `"comments": "mine"` to keep other people's comments out of
+  the task.
+- Secrets stay in the environment and `~/.autoforge/env` (refused unless mode `600`). Comments
+  and logs mask them as `***`. Patches are stored with mode `600` in `~/.autoforge/patches`.
+- `dailyRunLimit` bounds how many runs start per day.
+- `/publish` pushes a branch, which can trigger `on: push` CI before anyone reviews the PR.
+
 ## Custom sandboxes
 
 Implement `Sandbox` from `autoforge` to run sessions somewhere else (E2B, Daytona, a VM).
@@ -96,8 +173,7 @@ receives `{ signal }`: stop and clean up when it aborts.
 
 ## Roadmap
 
-Next: `autoforge serve`, a local daemon that picks up Linear issues assigned to you, runs them,
-and links the PR back on the issue.
+Next: a menu-bar app on top of the `autoforge serve` status endpoint.
 
 ## Licence
 
