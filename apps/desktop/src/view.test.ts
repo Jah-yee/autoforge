@@ -116,6 +116,14 @@ describe("run list", () => {
     ]);
   });
 
+  it("wraps each row part in a data-part span for styling", () => {
+    show(snap({ kind: "ok", runs }));
+    const parts = (r: HTMLElement) =>
+      [...r.querySelectorAll("[data-part]")].map((e) => (e as HTMLElement).dataset.part);
+    expect(parts(rows()[0]!)).toEqual(["identifier", "repo", "status", "time", "hint"]);
+    expect(parts(rows()[4]!)).toEqual(["identifier", "repo", "status", "time", "pr"]);
+  });
+
   it("opens the PR when there is one, otherwise the issue", () => {
     show(snap({ kind: "ok", runs }));
     rows()[4]!.click();

@@ -46,14 +46,15 @@ function command(text: string, act: Actions): HTMLElement {
 }
 
 function row(r: Run, status: string, now: number, act: Actions): HTMLElement {
+  const part = (name: string, text: string) => h("span", { "data-part": name }, text);
   const parts: Child[] = [
-    r.identifier,
-    `${r.repo}@${r.ref}`,
-    status,
-    time(Date.parse(r.updatedAt), now),
+    part("identifier", r.identifier),
+    part("repo", `${r.repo}@${r.ref}`),
+    part("status", status),
+    time(Date.parse(r.updatedAt), now, { "data-part": "time" }),
   ];
-  if (r.prUrl) parts.push(prLabel(r.prUrl));
-  if (r.status === "awaiting_approval") parts.push("Reply /publish on the issue");
+  if (r.prUrl) parts.push(part("pr", prLabel(r.prUrl)));
+  if (r.status === "awaiting_approval") parts.push(part("hint", "Reply /publish on the issue"));
   const b = h("button", { type: "button", "data-row": "", "data-key": `run:${r.issueId}` });
   parts.forEach((p, i) => b.append(...(i ? [", ", p] : [p])));
   const url = r.prUrl ?? r.issueUrl;
