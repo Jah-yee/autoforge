@@ -17,6 +17,9 @@ case "$1" in
   id) id -u ;;
   latin1) printf 'caf\\351\\n' >> "$target" ;;
   unicode-name) echo x > "naïve file.txt" ;;
+  noprefix)
+    git config diff.noprefix true && git config diff.mnemonicPrefix true && git config color.diff always
+    echo changed >> "$target" ;;
   hang-collect)
     git config diff.external "sh -c 'sleep 600'"
     git config core.fsmonitor "sleep 600"

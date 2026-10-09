@@ -103,6 +103,16 @@ export function runScenarios(ctx: ScenarioContext): void {
     expect(r.patch).toContain("+changed");
   });
 
+  it("writes a/ and b/ prefixes without color even when the agent set diff.noprefix", async () => {
+    const r = await run(options(ctx, "noprefix"));
+    expect(r.status).toBe("changed");
+    // Exact lines and no ANSI escapes (color.diff=always), so `git apply` on the host accepts it.
+    expect(r.patch).not.toContain("\u001b");
+    const lines = r.patch.split("\n");
+    expect(lines).toContain(`--- a/${ctx.target}`);
+    expect(lines).toContain(`+++ b/${ctx.target}`);
+  });
+
   it("lists file names exactly, without git's quoting", async () => {
     const r = await run(options(ctx, "unicode-name"));
     expect(r.filesChanged).toEqual(["naïve file.txt"]);

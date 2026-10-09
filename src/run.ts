@@ -51,7 +51,16 @@ export type RunResult = {
 const GIT_ENV = { GIT_TERMINAL_PROMPT: "0" };
 // The agent owns .git/config, so collect turns off everything in it that can run a command.
 const SAFE_GIT = ["git", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null"];
-const NO_EXT = ["--no-ext-diff", "--no-textconv"];
+// Pinned prefixes, paths and color, so diff.noprefix, diff.mnemonicPrefix, diff.relative or
+// color.diff in the agent's config cannot change the patch format `git apply` on the host expects.
+const DIFF_FLAGS = [
+  "--no-ext-diff",
+  "--no-textconv",
+  "--src-prefix=a/",
+  "--dst-prefix=b/",
+  "--no-relative",
+  "--no-color",
+];
 
 export async function run(options: RunOptions): Promise<RunResult> {
   validate(options);
@@ -203,7 +212,10 @@ export async function run(options: RunOptions): Promise<RunResult> {
 
     const add = await collect(["add", "-A"]);
     if (collectSignal.aborted) return collectStopped();
-    const diff = await collect(["diff", "--cached", "--binary", ...NO_EXT, baseSha], maxPatchBytes);
+    const diff = await collect(
+      ["diff", "--cached", "--binary", ...DIFF_FLAGS, baseSha],
+      maxPatchBytes,
+    );
     if (collectSignal.aborted) return collectStopped();
     if (!add.ok || !diff.ok)
       return fail("sandbox_error", "could not collect the agent's changes with git");
@@ -217,7 +229,7 @@ export async function run(options: RunOptions): Promise<RunResult> {
         "unsupported_encoding",
         "the patch contains non-UTF-8 text; autoforge cannot carry it safely",
       );
-    const names = await collect(["diff", "--cached", "--name-only", "-z", ...NO_EXT, baseSha]);
+    const names = await collect(["diff", "--cached", "--name-only", "-z", ...DIFF_FLAGS, baseSha]);
     if (collectSignal.aborted) return collectStopped();
     const status: RunStatus = timeout.aborted ? "timed_out" : diff.text ? "changed" : "no_changes";
     return finish({
@@ -230,8 +242,9 @@ export async function run(options: RunOptions): Promise<RunResult> {
   emit({ type: "phase", phase: "creating_sandbox" });
   let session: SandboxSession;
   try {
-    session = await sandbox.create();
+    session = await sandbox.create({ signal });
   } catch (e) {
+    if (signal.aborted) return stopped();
     const reason = e instanceof SandboxUnavailableError ? "sandbox_unavailable" : "sandbox_error";
     return fail(reason, errorMessage(e));
   }

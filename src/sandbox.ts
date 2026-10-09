@@ -16,7 +16,8 @@ export interface SandboxSession {
 }
 
 export interface Sandbox {
-  create(): Promise<SandboxSession>;
+  /** Aborting the signal should stop the creation and clean up anything half made. */
+  create(opts?: { signal?: AbortSignal }): Promise<SandboxSession>;
 }
 
 /** Throw from create() when the sandbox backend is not running (for example Docker is stopped). */

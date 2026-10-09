@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { DockerSandbox } from "../src/docker.js";
-import { run } from "../src/index.js";
+import { run, type SandboxSession } from "../src/index.js";
 import { proc } from "../src/proc.js";
 import { fakeAgent } from "./fake-agent.js";
 import { runSafetyScenarios } from "./safety-scenarios.js";
@@ -69,6 +69,53 @@ describe.skipIf(!dockerUp && !process.env.AUTOFORGE_REQUIRE_DOCKER)(
       } finally {
         await s.destroy();
       }
+    });
+
+    it("drops every capability and blocks privilege escalation for the agent", async () => {
+      const s = await ctx.sandbox().create();
+      try {
+        let out = "";
+        await s.exec(["cat", "/proc/self/status"], { onStdout: (c) => (out += c) });
+        const field = (name: string) => new RegExp(`^${name}:\\s*(\\S+)`, "m").exec(out)?.[1];
+        expect(field("CapEff")).toBe("0000000000000000");
+        expect(field("NoNewPrivs")).toBe("1");
+        // Only CAP_CHOWN (bit 0) is left in the bounding set, for the root prep step.
+        expect(field("CapBnd")).toBe("0000000000000001");
+      } finally {
+        await s.destroy();
+      }
+    });
+
+    it("rejects create with an aborted signal and leaves no container", async () => {
+      const before = await containers();
+      const created = ctx.sandbox().create({ signal: AbortSignal.abort() });
+      const outcome = await created.then(
+        (s) => s.destroy().then(() => "resolved"),
+        () => "rejected",
+      );
+      expect(outcome).toBe("rejected");
+      expect(await containers()).toBe(before);
+    });
+
+    it("never resolves create after its signal aborted, and leaves no container", async () => {
+      const before = await containers();
+      const late: number[] = [];
+      for (const ms of [50, 150, 300, 600]) {
+        const ac = new AbortController();
+        setTimeout(() => ac.abort(), ms);
+        let session: SandboxSession | undefined;
+        try {
+          session = await ctx.sandbox().create({ signal: ac.signal });
+          // Resolving is fine only if the abort had not happened yet when create settled.
+          if (ac.signal.aborted) late.push(ms);
+        } catch {
+          // Rejecting is the expected outcome of an abort.
+        } finally {
+          await session?.destroy();
+        }
+      }
+      expect(late).toEqual([]);
+      expect(await containers()).toBe(before);
     });
 
     it("runs the agent as a non-root user", async () => {

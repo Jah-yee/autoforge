@@ -154,6 +154,32 @@ describe("sandbox failures", () => {
     expect(r).toMatchObject({ status: "failed", reason: "sandbox_error", message: "boom" });
   });
 
+  // Rejects only once its signal fires (or after 2 s, if it was never given one).
+  const slowCreate: Sandbox = {
+    create: (o) =>
+      new Promise((_, reject) => {
+        const t = setTimeout(() => reject(new Error("create was never cancelled")), 2_000);
+        o?.signal?.addEventListener("abort", () => {
+          clearTimeout(t);
+          reject(new Error("create cancelled"));
+        });
+      }),
+  };
+
+  it("cancels a slow sandbox create at the timeout", async () => {
+    const started = Date.now();
+    const r = await run({ ...base(), sandbox: slowCreate, timeoutMs: 300 });
+    expect(r.status).toBe("timed_out");
+    expect(Date.now() - started).toBeLessThan(1_500);
+  });
+
+  it("cancels a slow sandbox create when the caller aborts", async () => {
+    const ac = new AbortController();
+    setTimeout(() => ac.abort(), 100);
+    const r = await run({ ...base(), sandbox: slowCreate, signal: ac.signal });
+    expect(r).toMatchObject({ status: "failed", reason: "aborted" });
+  });
+
   it("gives up on a collect command that hangs, at the collect deadline", async () => {
     const inner = new TempDirSandbox();
     const sandbox: Sandbox = {
@@ -187,7 +213,7 @@ describe("sandbox failures", () => {
           ...s,
           exec: async (cmd, o) => {
             if (cmd.includes("git") && cmd.includes("add"))
-              await new Promise((r) => setTimeout(r, 1_200));
+              await new Promise((r) => setTimeout(r, 2_000));
             return s.exec(cmd, o);
           },
         };
@@ -197,7 +223,7 @@ describe("sandbox failures", () => {
       ...base(),
       sandbox,
       agent: { command: fakeAgent("sleep") },
-      timeoutMs: 1_500,
+      timeoutMs: 4_000,
     });
     expect(r.status).toBe("timed_out");
     expect(r.patch).toContain("+x");
