@@ -10,7 +10,12 @@ import {
 
 export type RunStatus = "changed" | "no_changes" | "failed" | "timed_out";
 export type FailureReason =
-  "aborted" | "clone_failed" | "sandbox_unavailable" | "sandbox_error" | "patch_too_large";
+  | "aborted"
+  | "clone_failed"
+  | "sandbox_unavailable"
+  | "sandbox_error"
+  | "patch_too_large"
+  | "unsupported_encoding";
 export type Phase = "creating_sandbox" | "cloning" | "running" | "collecting" | "done";
 export type RunEvent =
   { type: "phase"; phase: Phase } | { type: "log"; stream: "stdout" | "stderr"; line: string };
@@ -44,12 +49,21 @@ export type RunResult = {
 };
 
 const GIT_ENV = { GIT_TERMINAL_PROMPT: "0" };
+// The agent owns .git/config, so collect turns off everything in it that can run a command.
+const SAFE_GIT = ["git", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null"];
+const NO_EXT = ["--no-ext-diff", "--no-textconv"];
 
 export async function run(options: RunOptions): Promise<RunResult> {
   validate(options);
   const { repo, task, agent, sandbox } = options;
   const maxPatchBytes = options.maxPatchBytes ?? 10_000_000;
-  const emit = options.onEvent ?? (() => {});
+  const emit = (event: RunEvent) => {
+    try {
+      options.onEvent?.(event);
+    } catch {
+      // A throwing callback must not crash the run (or the host, from a stream listener).
+    }
+  };
 
   // The token reaches git as a one-off header on the clone command, never as config on disk.
   const authHeader = repo.token
@@ -65,7 +79,8 @@ export async function run(options: RunOptions): Promise<RunResult> {
   const stdout = new LineSplitter(logLine("stdout"));
   const stderr = new LineSplitter(logLine("stderr"));
 
-  const timeout = AbortSignal.timeout(options.timeoutMs ?? 30 * 60_000);
+  const timeoutMs = options.timeoutMs ?? 30 * 60_000;
+  const timeout = AbortSignal.timeout(timeoutMs);
   const signal = options.signal ? AbortSignal.any([timeout, options.signal]) : timeout;
 
   const started = Date.now();
@@ -110,12 +125,13 @@ export async function run(options: RunOptions): Promise<RunResult> {
       }
     };
     // Collects stdout instead of logging it, up to `limit` bytes.
-    const capture = async (cmd: string[], limit = Infinity) => {
+    const capture = async (cmd: string[], limit = Infinity, signal?: AbortSignal) => {
       let text = "";
       let bytes = 0;
       const r = await exec(cmd, {
         cwd: w,
         env: GIT_ENV,
+        signal,
         onStdout: (c) => {
           bytes += Buffer.byteLength(c);
           if (bytes <= limit) text += c;
@@ -173,18 +189,39 @@ export async function run(options: RunOptions): Promise<RunResult> {
     if (options.signal?.aborted) return stopped();
 
     emit({ type: "phase", phase: "collecting" });
-    const add = await capture(["git", "add", "-A"]);
-    const diff = await capture(["git", "diff", "--cached", "--binary", baseSha], maxPatchBytes);
+    const left = timeoutMs - (Date.now() - started);
+    const deadline = AbortSignal.timeout(Math.max(1_000, Math.min(left, 5 * 60_000)));
+    const collectSignal = options.signal ? AbortSignal.any([deadline, options.signal]) : deadline;
+    const collect = (args: string[], limit?: number) =>
+      capture([...SAFE_GIT, ...args], limit, collectSignal);
+    const collectStopped = () =>
+      options.signal?.aborted
+        ? stopped()
+        : fail("sandbox_error", "collecting the changes timed out");
+
+    const add = await collect(["add", "-A"]);
+    if (collectSignal.aborted) return collectStopped();
+    const diff = await collect(["diff", "--cached", "--binary", ...NO_EXT, baseSha], maxPatchBytes);
+    if (collectSignal.aborted) return collectStopped();
     if (!add.ok || !diff.ok)
       return fail("sandbox_error", "could not collect the agent's changes with git");
     if (diff.overflow)
       return fail("patch_too_large", `the patch is larger than ${maxPatchBytes} bytes`);
-    const names = await capture(["git", "diff", "--cached", "--name-only", baseSha]);
+    // ponytail: the sandbox hands back text, so bytes that are not UTF-8 arrive as U+FFFD and a
+    // file that really contains U+FFFD is a false positive. Upgrade path: byte-level capture in
+    // the Sandbox contract.
+    if (diff.text.includes("\uFFFD"))
+      return fail(
+        "unsupported_encoding",
+        "the patch contains non-UTF-8 text; autoforge cannot carry it safely",
+      );
+    const names = await collect(["diff", "--cached", "--name-only", "-z", ...NO_EXT, baseSha]);
+    if (collectSignal.aborted) return collectStopped();
     const status: RunStatus = timeout.aborted ? "timed_out" : diff.text ? "changed" : "no_changes";
     return finish({
       status,
       patch: diff.text,
-      filesChanged: names.text.split("\n").filter(Boolean),
+      filesChanged: names.text.split("\0").filter(Boolean),
     });
   };
 

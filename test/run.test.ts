@@ -118,6 +118,18 @@ describe("tokens", () => {
   });
 });
 
+describe("onEvent", () => {
+  it("ignores a callback that throws", async () => {
+    const r = await run({
+      ...base(),
+      onEvent: () => {
+        throw new Error("host bug");
+      },
+    });
+    expect(r.status).toBe("no_changes");
+  });
+});
+
 describe("sandbox failures", () => {
   const throwing = (err: Error): Sandbox => ({
     create: async () => {
@@ -140,6 +152,30 @@ describe("sandbox failures", () => {
   it("maps other create errors to sandbox_error", async () => {
     const r = await run({ ...base(), sandbox: throwing(new Error("boom")) });
     expect(r).toMatchObject({ status: "failed", reason: "sandbox_error", message: "boom" });
+  });
+
+  it("gives up on a collect command that hangs, at the collect deadline", async () => {
+    const inner = new TempDirSandbox();
+    const sandbox: Sandbox = {
+      create: async () => {
+        const s = await inner.create();
+        return {
+          ...s,
+          exec: (cmd, o) =>
+            cmd.includes("add")
+              ? new Promise((resolve) =>
+                  o?.signal?.addEventListener("abort", () => resolve({ exitCode: null })),
+                )
+              : s.exec(cmd, o),
+        };
+      },
+    };
+    const r = await run({ ...base(), sandbox, timeoutMs: 2_000 });
+    expect(r).toMatchObject({
+      status: "failed",
+      reason: "sandbox_error",
+      message: "collecting the changes timed out",
+    });
   });
 
   it("returns sandbox_error when the session dies mid-run, and still destroys it", async () => {

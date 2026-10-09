@@ -91,4 +91,20 @@ export function runScenarios(ctx: ScenarioContext): void {
     const r = await run(options(ctx, "nuke-git"));
     expect(r).toMatchObject({ status: "failed", reason: "sandbox_error", patch: "" });
   });
+
+  it("refuses a patch whose text is not UTF-8", async () => {
+    const r = await run(options(ctx, "latin1"));
+    expect(r).toMatchObject({ status: "failed", reason: "unsupported_encoding", patch: "" });
+  });
+
+  it("ignores diff.external and core.fsmonitor the agent set in .git/config", async () => {
+    const r = await run(options(ctx, "hang-collect", { timeoutMs: ctx.timeoutMs }));
+    expect(r.status).toBe("changed");
+    expect(r.patch).toContain("+changed");
+  });
+
+  it("lists file names exactly, without git's quoting", async () => {
+    const r = await run(options(ctx, "unicode-name"));
+    expect(r.filesChanged).toEqual(["naïve file.txt"]);
+  });
 }

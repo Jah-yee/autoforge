@@ -15,6 +15,12 @@ case "$1" in
   read-git-config) cat .git/config ;;
   nuke-git) rm -rf .git ;;
   id) id -u ;;
+  latin1) printf 'caf\\351\\n' >> "$target" ;;
+  unicode-name) echo x > "naïve file.txt" ;;
+  hang-collect)
+    git config diff.external "sh -c 'sleep 600'"
+    git config core.fsmonitor "sleep 600"
+    echo changed >> "$target" ;;
   *) echo "unknown mode $1" >&2; exit 64 ;;
 esac
 `;

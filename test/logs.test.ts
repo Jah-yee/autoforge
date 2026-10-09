@@ -21,6 +21,15 @@ describe("LineSplitter", () => {
     s.push("c123\n");
     expect(lines).toEqual(["key=***"]);
   });
+
+  it("breaks a line that never ends at 64 KiB", () => {
+    const lines: string[] = [];
+    const s = new LineSplitter((l) => lines.push(l));
+    for (let i = 0; i < 200; i++) s.push("x".repeat(1024));
+    s.flush();
+    expect(lines.join("")).toHaveLength(200 * 1024);
+    for (const l of lines) expect(l.length).toBeLessThanOrEqual(64 * 1024);
+  });
 });
 
 describe("TailBuffer", () => {

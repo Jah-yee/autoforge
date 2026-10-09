@@ -2,12 +2,21 @@
 export class LineSplitter {
   private rest = "";
 
-  constructor(private readonly onLine: (line: string) => void) {}
+  constructor(
+    private readonly onLine: (line: string) => void,
+    /** A line longer than this is emitted in pieces. Counted in UTF-16 code units. */
+    private readonly maxLineLength = 64 * 1024,
+  ) {}
 
   push(chunk: string): void {
     const parts = (this.rest + chunk).split("\n");
     this.rest = parts.pop() ?? "";
     for (const p of parts) this.onLine(p.endsWith("\r") ? p.slice(0, -1) : p);
+    // ponytail: a secret straddling a forced break is not masked; accepted for unbounded lines.
+    while (this.rest.length > this.maxLineLength) {
+      this.onLine(this.rest.slice(0, this.maxLineLength));
+      this.rest = this.rest.slice(this.maxLineLength);
+    }
   }
 
   flush(): void {
