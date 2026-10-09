@@ -114,7 +114,7 @@ export async function loadState(
 }
 
 /** Write to a temp file in the same directory with mode 600, fsync, rename. */
-async function writeFileAtomic(path: string, text: string): Promise<void> {
+export async function writeFileAtomic(path: string, text: string): Promise<void> {
   const tmp = `${path}.${randomUUID()}.tmp`;
   try {
     const fh = await open(tmp, "w", 0o600);

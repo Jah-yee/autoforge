@@ -1,9 +1,10 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { rm, writeFile } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import type { Daemon } from "./daemon.js";
+import { writeFileAtomic } from "./state.js";
 
 export type StatusSource = Pick<Daemon, "runs" | "patch" | "command">;
 export type StatusServer = { port: number; token: string; close(): Promise<void> };
@@ -37,7 +38,12 @@ export async function startStatusServer(
         ? send(res, 200, daemon.runs())
         : send(res, 405, { error: "use GET" });
     }
-    const issueId = decodeURIComponent(rawId);
+    let issueId: string;
+    try {
+      issueId = decodeURIComponent(rawId);
+    } catch {
+      return send(res, 400, { error: "malformed issue id" });
+    }
     if (action === "patch") {
       if (req.method !== "GET") return send(res, 405, { error: "use GET" });
       const patch = await daemon.patch(issueId);
@@ -56,7 +62,9 @@ export async function startStatusServer(
 
   const server = createServer((req, res) => {
     handle(req, res).catch((e: unknown) =>
-      send(res, 500, { error: e instanceof Error ? e.message : String(e) }),
+      res.headersSent
+        ? res.destroy()
+        : send(res, 500, { error: e instanceof Error ? e.message : String(e) }),
     );
   });
   await new Promise<void>((resolve, reject) => {
@@ -65,8 +73,7 @@ export async function startStatusServer(
   });
   const { port } = server.address() as AddressInfo;
   const file = join(stateDir, "status.json");
-  await rm(file, { force: true }); // so the mode below applies to a new file
-  await writeFile(file, JSON.stringify({ port, token, pid: process.pid }), { mode: 0o600 });
+  await writeFileAtomic(file, JSON.stringify({ port, token, pid: process.pid }));
   return {
     port,
     token,

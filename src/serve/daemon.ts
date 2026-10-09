@@ -570,11 +570,7 @@ export class Daemon {
       this.set(entry, { status: "published", prUrl: out.prUrl });
       await this.save();
       this.log("info", "published", out.prUrl, entry.identifier);
-      try {
-        if (entry.run) await deletePatch(this.o.stateDir, entry.run.id);
-      } catch (e) {
-        this.log("warn", "cleanup_failed", errorMessage(e), entry.identifier);
-      }
+      if (entry.run) await this.dropPatch(entry.run.id, entry.identifier);
       await this.post(id, `Draft PR opened: ${out.prUrl}`);
       await this.o.linear
         .attachUrl(id, out.prUrl, "Draft PR (autoforge)")

@@ -71,6 +71,17 @@ describe("status endpoint", () => {
     ).toBe(403);
   });
 
+  it("answers 401 to a wrong token of the right length", async () => {
+    const h = await running();
+    const wrong = { Authorization: `Bearer ${"0".repeat(64)}` };
+    expect((await call(h.port, "/runs", { headers: wrong })).status).toBe(401);
+  });
+
+  it("answers 400 to a malformed percent-escape in the path", async () => {
+    const h = await running();
+    expect((await call(h.port, "/runs/%zz/patch", { headers: h.auth })).status).toBe(400);
+  });
+
   it("lists runs without patches or logs, and serves a patch", async () => {
     const h = await running();
     const list = await call(h.port, "/runs", { headers: h.auth });

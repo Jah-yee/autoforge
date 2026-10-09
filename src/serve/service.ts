@@ -109,6 +109,8 @@ export async function installService(o: ServiceOptions): Promise<string> {
     await writeFile(file, systemdUnit(o));
     await must(run, "systemctl", ["--user", "daemon-reload"]);
     await must(run, "systemctl", ["--user", "enable", "--now", UNIT]);
+    // enable --now does not restart a running unit, so a reinstall would keep the old one.
+    await must(run, "systemctl", ["--user", "restart", UNIT]);
   }
   return file;
 }

@@ -90,6 +90,18 @@ WantedBy=default.target
   });
 });
 
+describe("escaping", () => {
+  const nasty = { ...mac, node: '/a<b>"c\\d/node', cli: "/x/cli.js", home: "/h" };
+
+  it("escapes <, >, quote and backslash in the plist", () => {
+    expect(launchdPlist(nasty)).toContain("<string>/a&lt;b&gt;&quot;c\\d/node</string>");
+  });
+
+  it("escapes backslash and quote in the systemd unit", () => {
+    expect(systemdUnit(nasty)).toContain('ExecStart="/a<b>\\"c\\\\d/node" "/x/cli.js" serve');
+  });
+});
+
 describe("installService", () => {
   it("installs on macOS: writes the plist, boots out any old copy, bootstraps", async () => {
     const home = await mkdtemp(join(tmpdir(), "autoforge-home-"));
@@ -121,6 +133,7 @@ describe("installService", () => {
     expect(calls).toEqual([
       "systemctl --user daemon-reload",
       "systemctl --user enable --now autoforge.service",
+      "systemctl --user restart autoforge.service",
     ]);
   });
 
