@@ -43,6 +43,17 @@ describe.skipIf(!dockerUp && !process.env.AUTOFORGE_REQUIRE_DOCKER)(
       }
     });
 
+    it("caps the number of processes", async () => {
+      const s = await ctx.sandbox().create();
+      try {
+        let out = "";
+        await s.exec(["cat", "/sys/fs/cgroup/pids.max"], { onStdout: (c) => (out += c) });
+        expect(out.trim()).toBe("4096");
+      } finally {
+        await s.destroy();
+      }
+    });
+
     it("stops the process inside the container on abort", async () => {
       const s = await ctx.sandbox().create();
       try {

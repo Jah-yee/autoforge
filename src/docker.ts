@@ -39,6 +39,8 @@ export class DockerSandbox implements Sandbox {
       String(cpus),
       "--memory",
       memory,
+      "--pids-limit",
+      "4096",
       "--network",
       network,
       "--user",
