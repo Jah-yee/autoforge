@@ -71,6 +71,46 @@ describe.skipIf(!dockerUp && !process.env.AUTOFORGE_REQUIRE_DOCKER)(
       }
     });
 
+    it("drops every capability and blocks privilege escalation for the agent", async () => {
+      const s = await ctx.sandbox().create();
+      try {
+        let out = "";
+        await s.exec(["cat", "/proc/self/status"], { onStdout: (c) => (out += c) });
+        const field = (name: string) => new RegExp(`^${name}:\\s*(\\S+)`, "m").exec(out)?.[1];
+        expect(field("CapEff")).toBe("0000000000000000");
+        expect(field("NoNewPrivs")).toBe("1");
+        // Only CAP_CHOWN (bit 0) is left in the bounding set, for the root prep step.
+        expect(field("CapBnd")).toBe("0000000000000001");
+      } finally {
+        await s.destroy();
+      }
+    });
+
+    it("rejects create with an aborted signal and leaves no container", async () => {
+      const before = await containers();
+      const created = ctx.sandbox().create({ signal: AbortSignal.abort() });
+      const outcome = await created.then(
+        (s) => s.destroy().then(() => "resolved"),
+        () => "rejected",
+      );
+      expect(outcome).toBe("rejected");
+      expect(await containers()).toBe(before);
+    });
+
+    it("removes the container when create is aborted while docker run is in flight", async () => {
+      const before = await containers();
+      for (const ms of [50, 150, 300, 600]) {
+        const ac = new AbortController();
+        setTimeout(() => ac.abort(), ms);
+        await ctx
+          .sandbox()
+          .create({ signal: ac.signal })
+          .then((s) => s.destroy())
+          .catch(() => {});
+      }
+      expect(await containers()).toBe(before);
+    });
+
     it("runs the agent as a non-root user", async () => {
       const r = await run(options(ctx, "id"));
       expect(r.logs.split("\n")).toContain("1000");

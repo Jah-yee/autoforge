@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { proc } from "./proc.js";
 import {
   SandboxUnavailableError,
@@ -22,41 +23,65 @@ const WORKDIR = "/workspace";
 export class DockerSandbox implements Sandbox {
   constructor(private readonly options: DockerSandboxOptions) {}
 
-  async create(): Promise<SandboxSession> {
+  async create({ signal }: { signal?: AbortSignal } = {}): Promise<SandboxSession> {
     const { image, cpus = 2, memory = "4g", network = "bridge", user = "1000:1000" } = this.options;
-    if ((await proc("docker", ["info", "--format", "{{.ServerVersion}}"])).exitCode !== 0) {
+    const aborted = () => new Error("sandbox creation was aborted");
+    const info = await proc("docker", ["info", "--format", "{{.ServerVersion}}"], { signal });
+    if (signal?.aborted) throw aborted();
+    if (info.exitCode !== 0) {
       throw new SandboxUnavailableError(
         "Docker is not running. Start Docker Desktop, OrbStack or Colima and try again.",
       );
     }
-    const started = await proc("docker", [
-      "run",
-      "-d",
-      "--rm",
-      "--label",
-      "autoforge=1",
-      "--cpus",
-      String(cpus),
-      "--memory",
-      memory,
-      "--pids-limit",
-      "4096",
-      "--network",
-      network,
-      "--user",
-      user,
-      "-e",
-      "HOME=/tmp",
-      "--entrypoint",
-      "sleep",
-      image,
-      "infinity",
-    ]);
+    // A known name, so an aborted `docker run` (which may still create the container) can be
+    // removed even though it never printed an id.
+    const name = `autoforge-${randomUUID()}`;
+    const destroy = async () => {
+      await proc("docker", ["rm", "-f", name]);
+    };
+    const started = await proc(
+      "docker",
+      [
+        "run",
+        "-d",
+        "--rm",
+        "--name",
+        name,
+        "--label",
+        "autoforge=1",
+        "--cpus",
+        String(cpus),
+        "--memory",
+        memory,
+        "--pids-limit",
+        "4096",
+        "--network",
+        network,
+        "--user",
+        user,
+        "--security-opt",
+        "no-new-privileges",
+        "--cap-drop",
+        "ALL",
+        // Only for the root prep step below, which chowns the workdir. The agent runs as `user`
+        // with no effective capabilities, and no-new-privileges stops it gaining this one.
+        "--cap-add",
+        "CHOWN",
+        "-e",
+        "HOME=/tmp",
+        "--entrypoint",
+        "sleep",
+        image,
+        "infinity",
+      ],
+      { signal },
+    );
+    if (signal?.aborted) {
+      await destroy();
+      throw aborted();
+    }
     if (started.exitCode !== 0) throw new Error(`docker run failed: ${started.stderr.trim()}`);
     const id = started.stdout.trim();
-    const destroy = async () => {
-      await proc("docker", ["rm", "-f", id]);
-    };
 
     const prep = await proc("docker", [
       "exec",
@@ -70,8 +95,9 @@ export class DockerSandbox implements Sandbox {
       WORKDIR,
       user,
     ]);
-    if (prep.exitCode !== 0) {
+    if (prep.exitCode !== 0 || signal?.aborted) {
       await destroy();
+      if (signal?.aborted) throw aborted();
       throw new Error(`could not prepare ${WORKDIR}: ${prep.stderr.trim()}`);
     }
 
