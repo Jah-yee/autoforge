@@ -116,7 +116,8 @@ function body({ snap, now }: View, act: Actions): HTMLElement[] {
           ),
         ];
       const g = groupRuns(s.runs, now);
-      const label = (r: Run) => STATUS_LABEL[r.status] ?? r.status;
+      // groupRuns drops statuses missing from STATUS_LABEL (a newer daemon), so this lookup is total.
+      const label = (r: Run) => STATUS_LABEL[r.status];
       const list = [
         ...section("awaiting", "Awaiting approval", g.awaiting, label, now, act),
         ...section("running", "Running", g.running, label, now, act),
@@ -161,27 +162,42 @@ export function update(root: HTMLElement, view: View, act: Actions): void {
       [...root.querySelectorAll<HTMLElement>("[data-key]")]
         .find((e) => e.dataset.key === focused)
         ?.focus();
-  } else if (snap.lastOkAt !== null) {
-    root.querySelector("[data-updated]")?.setAttribute("data-at", String(snap.lastOkAt));
+  } else {
+    // A toggle that did not take effect leaves the checkbox flipped; show the real state.
+    const box = root.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    if (box) box.checked = view.autostart;
+    if (snap.lastOkAt !== null)
+      root.querySelector("[data-updated]")?.setAttribute("data-at", String(snap.lastOkAt));
   }
   tick(root, view.now);
 }
 
 /** Moves every relative time on to `now`. */
 export function tick(root: HTMLElement, now: number): void {
-  for (const e of root.querySelectorAll<HTMLElement>("[data-at]"))
-    e.textContent = relativeTime(now - Number(e.dataset.at));
+  for (const e of root.querySelectorAll<HTMLElement>("[data-at]")) {
+    const text = relativeTime(now - Number(e.dataset.at));
+    if (e.textContent !== text) e.textContent = text; // untouched text is not re-announced
+  }
 }
+
+const installed = new WeakMap<Document, (e: KeyboardEvent) => void>();
 
 /** Arrow keys move between rows, Enter opens (native button), Esc closes the popover. */
 export function installKeys(root: HTMLElement, act: Actions): void {
-  root.ownerDocument.addEventListener("keydown", (e) => {
+  const doc = root.ownerDocument;
+  const previous = installed.get(doc);
+  if (previous) doc.removeEventListener("keydown", previous); // one handler per document
+  const onKey = (e: KeyboardEvent) => {
     if (e.key === "Escape") return act.hide();
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
     const rows = [...root.querySelectorAll<HTMLElement>("[data-row]")];
+    if (!rows.length) return;
+    const down = e.key === "ArrowDown";
     const i = rows.indexOf(document.activeElement as HTMLElement);
-    const next = i === -1 ? 0 : e.key === "ArrowDown" ? i + 1 : i - 1;
+    const next = i === -1 ? (down ? 0 : rows.length - 1) : down ? i + 1 : i - 1;
     rows[Math.max(0, Math.min(next, rows.length - 1))]?.focus();
     e.preventDefault();
-  });
+  };
+  installed.set(doc, onKey);
+  doc.addEventListener("keydown", onKey);
 }

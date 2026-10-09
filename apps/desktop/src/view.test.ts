@@ -159,6 +159,29 @@ describe("keyboard", () => {
     expect(document.activeElement).toBe(rows()[0]);
   });
 
+  it("does nothing on arrow keys when there are no rows", () => {
+    show(snap({ kind: "ok", runs: [] }));
+    const ev = new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true });
+    document.body.dispatchEvent(ev);
+    expect(ev.defaultPrevented).toBe(false);
+  });
+
+  it("goes to the last row on ArrowUp from outside the list, and leaves other focus alone", () => {
+    show(snap({ kind: "ok", runs: [run("a"), run("b", { queuedAt: ago(1 * MIN) })] }));
+    button("Quit").focus();
+    press("ArrowUp");
+    expect(document.activeElement).toBe(rows()[1]);
+  });
+
+  it("does not swallow arrow keys when focus is in the footer and no row is entered", () => {
+    show(snap({ kind: "ok", runs: [run("a")] }));
+    const check = root.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    check.focus();
+    const ev = new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true, cancelable: true });
+    check.dispatchEvent(ev);
+    expect(ev.defaultPrevented).toBe(false);
+  });
+
   it("closes the popover on Escape from anywhere", () => {
     show(snap({ kind: "daemonNotRunning" }, null));
     press("Escape");
@@ -202,6 +225,22 @@ describe("unknown status", () => {
 });
 
 describe("updates", () => {
+  it("puts the checkbox back to the real state when a toggle did not take effect", () => {
+    show(snap({ kind: "ok", runs: [] }), { autostart: false });
+    const toggle = root.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    toggle.click();
+    expect(toggle.checked).toBe(true);
+    show(snap({ kind: "ok", runs: [] }), { autostart: false });
+    expect(root.querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked).toBe(false);
+  });
+
+  it("does not touch a relative time whose text is unchanged", () => {
+    show(snap({ kind: "ok", runs: [run("a")] }, NOW));
+    const node = rows()[0]!.querySelector("[data-at]")!.firstChild;
+    tick(root, NOW + 10_000);
+    expect(rows()[0]!.querySelector("[data-at]")!.firstChild).toBe(node);
+  });
+
   it("does not rebuild the list when only the poll time changes, so focus stays put", () => {
     show(snap({ kind: "ok", runs: [run("a")] }, NOW - 5_000));
     rows()[0]!.focus();
