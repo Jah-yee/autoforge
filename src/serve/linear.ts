@@ -13,6 +13,8 @@ export type LinearIssue = {
   identifier: string;
   title: string;
   description: string | null;
+  /** The issue's page in Linear, for example https://linear.app/acme/issue/ENG-123/title. */
+  url: string;
   updatedAt: string;
   assigneeId: string | null;
   /** Workflow state type: triage, backlog, unstarted, started, completed or canceled. */
@@ -55,6 +57,7 @@ type RawIssue = {
   identifier: string;
   title: string;
   description: string | null;
+  url: string;
   updatedAt: string;
   assignee: { id: string } | null;
   state: { type: string };
@@ -69,7 +72,7 @@ type IssuePage = {
 };
 
 // ponytail: last 100 comments and 50 labels per issue; paginate them if real issues get longer.
-const ISSUE_FIELDS = `id identifier title description updatedAt
+const ISSUE_FIELDS = `id identifier title description url updatedAt
   assignee { id } state { type } team { id key name } project { id name }
   labels(first: 50) { nodes { name } }
   comments(last: 100) { nodes { id body createdAt user { id name } } }`;
@@ -79,6 +82,7 @@ const toIssue = (r: RawIssue): LinearIssue => ({
   identifier: r.identifier,
   title: r.title,
   description: r.description,
+  url: r.url,
   updatedAt: r.updatedAt,
   assigneeId: r.assignee?.id ?? null,
   stateType: r.state.type,

@@ -15,6 +15,7 @@ const issue = (fields: Partial<LinearIssue> = {}): LinearIssue => ({
   identifier: "ENG-1",
   title: "Fix login",
   description: "The redirect loops.",
+  url: "https://linear.app/acme/issue/ENG-1/fix-login",
   updatedAt: "2026-10-09T12:00:00.000Z",
   assigneeId: "me",
   stateType: "unstarted",

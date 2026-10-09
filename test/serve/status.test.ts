@@ -106,11 +106,23 @@ describe("status endpoint", () => {
         ref: "main",
         queuedAt: "2026-10-09T12:00:00.000Z",
         updatedAt: "2026-10-09T12:00:00.000Z",
+        issueUrl: "https://linear.app/acme/issue/ENG-1",
       },
     ]);
     const patch = await call(h.port, "/runs/issue-1/patch", { headers: h.auth });
     expect(patch.status).toBe(200);
     expect(patch.body).toContain("+changed");
+  });
+
+  it("keeps issueUrl current when the issue moves and its Linear URL changes", async () => {
+    const h = await running();
+    h.clock.advance(1000);
+    h.linear.update("issue-1", { url: "https://linear.app/acme/issue/OPS-7" });
+    await step(h.d);
+    const runs = JSON.parse((await call(h.port, "/runs", { headers: h.auth })).body) as {
+      issueUrl?: string;
+    }[];
+    expect(runs[0]?.issueUrl).toBe("https://linear.app/acme/issue/OPS-7");
   });
 
   it("publishes like /publish, then refuses a discard in the wrong state", async () => {
