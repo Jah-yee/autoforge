@@ -125,7 +125,9 @@ Read from the environment only, never from `config.json`:
 - `LINEAR_API_KEY` (required): personal API key.
 - `GITHUB_TOKEN` (required): push token, used only by `publishToGitHub` on the host.
 - `CLONE_TOKEN` (optional): read-only token for cloning private repos inside the sandbox.
-- Every name in `agent.envFrom` (for example `ANTHROPIC_API_KEY`).
+- Every name in `agent.envFrom` (for example `ANTHROPIC_API_KEY`). `envFrom` may not name
+  `LINEAR_API_KEY`, `GITHUB_TOKEN` or `CLONE_TOKEN`; config validation refuses them, so they never
+  reach the sandbox.
 
 `autoforge serve` reads `~/.autoforge/env` (`KEY=value` lines) itself with `util.parseEnv`, after
 checking its mode; values already in the process environment win. The file is never executed by a
@@ -192,7 +194,9 @@ from `{comments}` and never mistaken for a command.
 2. Running: "Running on `owner/name@branch` in a sandbox."
 3. Result:
    - changed: status, files changed, diffstat, the first 80 lines of the patch in a code block
-     (masked with the run's secrets), and the available commands.
+     (masked with the run's secrets), and the available commands. If the patch contains one of the
+     user's secrets, the comment adds "Warning: this patch contains one of your secrets and cannot
+     be published."
    - no_changes / failed / timed_out: the reason and `/retry <feedback>`.
 4. Published: "Draft PR opened: <url>", plus the PR attached to the issue as a link.
 5. Discarded / expired / dropped / aborted: one line saying so.
@@ -202,18 +206,32 @@ from `{comments}` and never mistaken for a command.
 A comment is a command only when all hold:
 
 - its author id (from the API) equals the viewer id,
-- it was created after the issue's latest daemon result comment,
+- it was created after the latest daemon comment that carries the command gate: the Queued
+  comment (including "Queued for autoforge again") and the result comment. Other daemon comments
+  do not move the gate,
 - its id has not been handled before (handled ids are kept in state),
 - its body, trimmed, starts with `/publish`, `/publish force`, `/discard` or `/retry`.
 
-| Command             | Valid in                                                 | Effect                                                                 |
-| :------------------ | :------------------------------------------------------- | :--------------------------------------------------------------------- |
-| `/publish`          | `awaiting_approval`                                      | `publishToGitHub(result, { repo, token: GITHUB_TOKEN, base, signal })` |
-| `/publish force`    | `awaiting_approval`                                      | same with `force: true`                                                |
-| `/discard`          | `awaiting_approval`                                      | state `discarded`, patch file deleted                                  |
-| `/retry <feedback>` | `awaiting_approval`, `no_changes`, `failed`, `timed_out` | new run queued with feedback                                           |
+| Command             | Valid in                                                 | Effect                                                                       |
+| :------------------ | :------------------------------------------------------- | :--------------------------------------------------------------------------- |
+| `/publish`          | `awaiting_approval`                                      | `publishToGitHub(result, { repo, token: GITHUB_TOKEN, base, body, signal })` |
+| `/publish force`    | `awaiting_approval`                                      | same with `force: true`                                                      |
+| `/discard`          | `awaiting_approval`                                      | state `discarded`, patch file deleted                                        |
+| `/retry <feedback>` | `awaiting_approval`, `no_changes`, `failed`, `timed_out` | new run queued with feedback                                                 |
 
 A valid command in the wrong state gets a one-line reply explaining why it did nothing.
+
+Publishing rules:
+
+- The PR title is the first line of the task (the issue title with the default template). The PR
+  body is only `<identifier>: <title>`, a blank line and "Opened by autoforge from Linear issue
+  <identifier>."; the description, comments and `/retry` feedback never leave Linear.
+- A patch that contains one of the user's secrets (the values the daemon masks) is never published:
+  `/publish` fails with `invalid_result` and suggests `/retry` or `/discard`; nothing is pushed.
+- A publish that takes longer than 5 minutes is aborted and reported like any publish failure.
+- After `github_api_error` (the branch was pushed) or an aborted publish, the reply says to check
+  GitHub for an existing branch or pull request first, then `/publish force`. A missing patch
+  (`invalid_result`) suggests `/retry` or `/discard`.
 
 ### Changes under the daemon
 
@@ -226,9 +244,22 @@ A valid command in the wrong state gets a one-line reply explaining why it did n
 
 On start, any issue in `running` or `publishing` is handled:
 
-- `running`: re-queued once with a comment. A second interruption marks it `failed`.
-- `publishing`: back to `awaiting_approval` with a comment asking to `/publish` again (the publish
-  may or may not have happened; the error message from a repeat will say if the branch exists).
+- `running`: re-queued once with a comment. A second interruption marks it `failed`. A clean stop
+  (Ctrl-C, `service uninstall`, logout) while a run is in flight counts as an interruption too,
+  unless the run had already finished: a finished run keeps its result.
+- `publishing`: back to `awaiting_approval` with a comment saying the pull request may or may not
+  have been opened, asking the user to check GitHub for an existing branch or pull request first and
+  then reply `/publish force`.
+
+If saving a finished run fails (for example the patch cannot be written), the issue becomes
+`failed` with a comment and `/retry`, never stuck in `running`.
+
+### Single instance
+
+Only one daemon may use a state directory. `autoforge serve` creates `<dir>/serve.lock` with
+`O_EXCL` holding its pid before the daemon starts. If the file exists and names a live process other
+than itself, it exits with "autoforge serve is already running (pid N)."; a lock naming a dead pid is
+stale and is replaced. The lock is removed on shutdown, after the daemon stops.
 
 ## 6. State
 
@@ -242,6 +273,8 @@ type State = {
   cursor: string; // ISO time; advanced only after a successful poll
   dailyRuns: { date: string; count: number };
   issues: Record<string, IssueEntry>; // keyed by Linear issue id
+  noRoute: Record<string, string>; // issue id -> sorted labels when "No repo configured" was posted
+  outbox: { issueId: string; body: string; gate: boolean; attempts: number }[]; // pending comments
 };
 
 type IssueEntry = {
@@ -264,9 +297,15 @@ type IssueEntry = {
   handledCommentIds: string[];
   run?: Omit<RunResult, "patch" | "logs">; // from slice 1; patch stored separately
   prUrl?: string;
+  queuedAt: string; // when the issue last joined the queue; the queue runs oldest first
+  waiting?: "docker" | "limit"; // a "waiting" comment was already posted while queued
   updatedAt: string;
 };
 ```
+
+- Every daemon comment goes through the outbox: it is saved in state before the HTTP call, sent in
+  order per issue, and dropped (logged with the issue identifier) after 100 failed attempts.
+- `run.message` is masked before it is stored.
 
 - Patches: `~/.autoforge/patches/<runId>.patch`, mode `600`. Logs: tail kept only in memory and in
   the daemon log.
@@ -300,21 +339,25 @@ For the future menu-bar app and `autoforge status`.
   or other people's comments does nothing.
 - **Secrets** stay in the environment; the env file must be mode `600`; nothing posted to Linear
   contains them (masked like slice 1 logs).
+- **Routing** is untrusted: anyone in the workspace can add a `repo:` label, so they can choose
+  which configured-token repo a run clones. Publishing still needs the user's own `/publish`.
+- **What reaches GitHub:** the patch, a PR title from the task's first line and a body with only the
+  issue identifier and title. A patch containing a secret is refused.
 - **Spend:** `dailyRunLimit` bounds runs per day; over the limit, issues stay queued with a comment.
 - The CI-on-push caveat from slice 1 applies: `/publish` pushes a branch, which can trigger
   `on: push` workflows.
 
 ## 9. Failure handling
 
-| Failure                                     | Behaviour                                                                                                                |
-| :------------------------------------------ | :----------------------------------------------------------------------------------------------------------------------- |
-| Linear API error, network error, rate limit | Exponential backoff (5 s doubling, max 5 min), honour `Retry-After`; cursor not advanced                                 |
-| Docker unavailable (`sandbox_unavailable`)  | Queue paused; one "waiting for Docker" comment per affected issue; retried every poll; resumes automatically             |
-| Run fails / times out / no changes          | Result comment with reason; `/retry` available                                                                           |
-| Publish fails                               | Comment with the `PublishError` code and message; back to `awaiting_approval`; `branch_exists` suggests `/publish force` |
-| Daemon crash                                | launchd / systemd restarts it; restart rules in section 5                                                                |
-| Corrupt state                               | Section 6                                                                                                                |
-| Invalid config or env file permissions      | Refuse to start with a clear message                                                                                     |
+| Failure                                     | Behaviour                                                                                                    |
+| :------------------------------------------ | :----------------------------------------------------------------------------------------------------------- |
+| Linear API error, network error, rate limit | Exponential backoff (5 s doubling, max 5 min), honour `Retry-After`; cursor not advanced                     |
+| Docker unavailable (`sandbox_unavailable`)  | Queue paused; one "waiting for Docker" comment per affected issue; retried every poll; resumes automatically |
+| Run fails / times out / no changes          | Result comment with reason; `/retry` available                                                               |
+| Publish fails                               | Comment with the `PublishError` code and message; back to `awaiting_approval`; hints as in section 5         |
+| Daemon crash                                | launchd / systemd restarts it; restart rules in section 5                                                    |
+| Corrupt state                               | Section 6                                                                                                    |
+| Invalid config or env file permissions      | Refuse to start with a clear message                                                                         |
 
 Logs are one JSON object per line on stdout (`time`, `level`, `issue`, `event`, `message`), masked.
 The service unit redirects them to `~/.autoforge/daemon.log`.
@@ -343,13 +386,15 @@ Tests first; no real Linear, no real LLM.
   `/discard`; command from another user ignored; duplicate command handled once; wrong-state command
   reply; unassigned while queued and while running; expiry; daily limit; Docker unavailable pause
   and resume; publish failure keeps `awaiting_approval`; restart in `running` (once, then failed)
-  and in `publishing`; corrupt state.
+  and in `publishing`; corrupt state; secret in the patch refused; PR body content; publish
+  timeout; a run finished during stop keeps its result; a failed result save marks the run failed.
+- `cli.ts`: a second instance refused by a live lock; a stale lock replaced.
 - `status.ts`: real server on a random localhost port: 401 without token, 403 with `Origin`,
   `GET /runs`, publish and discard.
 - `service.ts`: rendered plist and unit text.
 - `config.ts`: validation errors; refusal when `~/.autoforge/env` is not mode `600`.
-- Manual before merge: a real Linear test team and a throwaway repo through the whole flow, with a
-  checklist in the PR.
+- Manual before merge: a real Linear test team and a throwaway repo through the whole flow, with
+  `docs/serve-manual-checklist.md` in the PR.
 
 ## 12. Out of scope
 

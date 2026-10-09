@@ -96,6 +96,9 @@ draft PR when you reply `/publish`.
 
 ### Set up
 
+Until autoforge is on npm, get the `autoforge` command from a clone of this repo:
+`pnpm install && pnpm build && npm link`.
+
 1. Build an agent image, for example `docker build -t autoforge-claude examples`.
 2. Create `~/.autoforge/config.json`:
 
@@ -127,10 +130,16 @@ draft PR when you reply `/publish`.
 
    `GITHUB_TOKEN` only pushes from your machine and needs contents and pull requests write.
    `CLONE_TOKEN` (optional, read-only) clones private repos inside the sandbox.
+   `agent.envFrom` cannot name `LINEAR_API_KEY`, `GITHUB_TOKEN` or `CLONE_TOKEN`.
 
 4. Run `autoforge serve` in a terminal, or `autoforge service install` to start it at login
    (launchd on macOS, a systemd user unit on Linux; logs go to `~/.autoforge/daemon.log`).
    `autoforge service uninstall` removes the service and leaves `~/.autoforge` alone.
+   The service pins the path of the Node binary you installed it with, so run
+   `autoforge service install` again after upgrading or switching Node (for example with nvm).
+
+Only one daemon runs per state directory: a second `autoforge serve` on the same `--dir` exits
+with "autoforge serve is already running (pid N)."
 
 ### Use
 
@@ -146,10 +155,13 @@ lines of the patch. Then reply on the issue:
 | `/retry <feedback>` | Runs again with the original task plus your feedback |
 
 Only your own comments count as commands. Results nobody answers are discarded after
-`approvalExpiryDays`. To start an issue over, remove the label and add it again.
+`approvalExpiryDays`. To start an issue over, remove the label, wait for the next poll
+(`pollSeconds`), then add it again; removing and re-adding it between two polls changes nothing.
 
 The repo comes from a `repo:owner/name` or `repo:owner/name@branch` label, then a project
-rule, then a team rule, then `defaultRepo`.
+rule, then a team rule, then `defaultRepo`. Anyone in your workspace can set a `repo:` label,
+so treat routing as untrusted: it picks what gets cloned, but publishing still needs your
+`/publish`.
 
 `autoforge status` lists the issues the daemon knows about. It talks to a status endpoint on
 `127.0.0.1` that needs the token in `~/.autoforge/status.json` and refuses browser requests.
@@ -164,6 +176,9 @@ rule, then a team rule, then `defaultRepo`.
   and logs mask them as `***`. Patches are stored with mode `600` in `~/.autoforge/patches`.
 - `dailyRunLimit` bounds how many runs start per day.
 - `/publish` pushes a branch, which can trigger `on: push` CI before anyone reviews the PR.
+- The PR title and body contain only the issue identifier and title, never the description,
+  comments or `/retry` feedback. A patch that contains one of your secrets is flagged in the
+  result comment and cannot be published.
 
 ## Custom sandboxes
 
