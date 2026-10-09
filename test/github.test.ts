@@ -142,7 +142,15 @@ describe("publishToGitHub", () => {
         { ...changed, baseSha: "--upload-pack=touch /tmp/autoforge-pwned" },
         opts({ fetch }),
       ),
-    ).rejects.toThrow(TypeError);
+    ).rejects.toMatchObject({ name: "PublishError", code: "invalid_result" });
+    expect(calls).toHaveLength(0);
+  });
+
+  it("stops with code aborted on an aborted signal, without touching GitHub", async () => {
+    const { fetch, calls } = stubFetch();
+    await expect(
+      publishToGitHub(changed, opts({ fetch, signal: AbortSignal.abort() })),
+    ).rejects.toMatchObject({ name: "PublishError", code: "aborted" });
     expect(calls).toHaveLength(0);
   });
 

@@ -11,7 +11,9 @@ export type PublishErrorCode =
   | "apply_failed"
   | "branch_exists"
   | "push_failed"
-  | "github_api_error";
+  | "github_api_error"
+  | "invalid_result"
+  | "aborted";
 
 export class PublishError extends Error {
   override name = "PublishError";
@@ -41,6 +43,8 @@ export type PublishOptions = {
   /** Defaults to https://api.github.com */
   apiUrl?: string;
   fetch?: typeof fetch;
+  /** Stops git and the API request. A publish stopped this way throws code "aborted". */
+  signal?: AbortSignal;
 };
 
 /** Applies a run's patch onto its base commit, pushes a branch and opens a pull request. */
@@ -55,7 +59,7 @@ export async function publishToGitHub(
     );
   }
   if (!/^[0-9a-f]{40}([0-9a-f]{24})?$/.test(result.baseSha)) {
-    throw new TypeError("result.baseSha is not a commit sha");
+    throw new PublishError("invalid_result", "result.baseSha is not a commit sha");
   }
   const firstLine = result.task.split("\n")[0]?.trim() ?? "";
   const branch = o.branch ?? `autoforge/${slug(firstLine)}-${result.id.slice(0, 8)}`;
@@ -84,8 +88,10 @@ export async function publishToGitHub(
     GIT_CONFIG_KEY_0: "http.extraHeader",
     GIT_CONFIG_VALUE_0: header,
   };
+  const aborted = (detail = "") => new PublishError("aborted", `publishing was aborted${detail}`);
   const git = async (code: PublishErrorCode, ...args: string[]) => {
-    const r = await proc("git", args, { cwd, env });
+    const r = await proc("git", args, { cwd, env, signal: o.signal });
+    if (o.signal?.aborted) throw aborted();
     if (r.exitCode !== 0) {
       throw new PublishError(code, redact(`git ${args.join(" ")} failed: ${r.stderr.trim()}`));
     }
@@ -159,11 +165,14 @@ export async function publishToGitHub(
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ title, head: branch, base, body, draft: o.draft ?? true }),
+        signal: o.signal,
       });
     } catch (e) {
+      if (o.signal?.aborted) throw aborted(` (branch ${branch} was pushed)`);
       throw pushed(e instanceof Error ? e.message : String(e));
     }
     const text = await res.text().catch(() => "");
+    if (o.signal?.aborted) throw aborted(` (branch ${branch} was pushed)`);
     if (!res.ok) throw pushed(`status ${res.status}: ${text}`);
     let prUrl: unknown;
     try {
