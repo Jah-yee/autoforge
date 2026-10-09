@@ -65,6 +65,7 @@ export type RunSummary = {
   queuedAt: string;
   updatedAt: string;
   prUrl?: string;
+  issueUrl?: string;
 };
 
 const VALID_WHEN: Record<Command["kind"], string> = {
@@ -190,6 +191,7 @@ export class Daemon {
       queuedAt: e.queuedAt,
       updatedAt: e.updatedAt,
       ...(e.prUrl ? { prUrl: e.prUrl } : {}),
+      ...(e.issueUrl ? { issueUrl: e.issueUrl } : {}),
     }));
   }
 
@@ -222,6 +224,8 @@ export class Daemon {
       (pickup === "all-assigned" ||
         issue.labels.some((l) => l.toLowerCase() === label.toLowerCase()));
     const open = issue.stateType !== "completed" && issue.stateType !== "canceled";
+    // Moving an issue to another team changes its URL; this also fills in pre-slice-3 entries.
+    if (entry) entry.issueUrl = issue.url;
     if (entry && picked && open) return this.handleComments(issue, entry);
     if (entry) return this.release(issue.id, entry, picked);
     if (picked && open) await this.pickUp(issue);
@@ -243,6 +247,7 @@ export class Daemon {
     const now = this.now().toISOString();
     this.state.issues[issue.id] = {
       identifier: issue.identifier,
+      issueUrl: issue.url,
       status: "queued",
       repo: route.repo,
       ref: route.ref,

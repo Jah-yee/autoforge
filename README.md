@@ -183,6 +183,31 @@ so treat routing as untrusted: it picks what gets cloned, but publishing still n
   comments or `/retry` feedback. A patch that contains one of your secrets is flagged in the
   result comment and cannot be published.
 
+## Desktop app
+
+A tray app for macOS (menu bar), Windows (system tray) and Linux (AppIndicator) that shows your
+own `autoforge serve`: a badge with the number of runs awaiting approval, and a list of running,
+queued and recent runs that opens the pull request or the Linear issue. It reads
+`~/.autoforge/status.json` (the default `--dir`) and polls the status endpoint every 5 seconds.
+The token stays in the app's Rust side; the window gets no network, file or shell access, and
+only `https://linear.app/` and `https://github.com/` links open.
+
+There are no published installers yet. Build it from this repository with Rust (the version in
+`apps/desktop/src-tauri/rust-toolchain.toml`) and the
+[Tauri prerequisites](https://tauri.app/start/prerequisites/) for your OS:
+
+```sh
+pnpm --dir apps/desktop install
+pnpm desktop:dev     # run it
+pnpm desktop:build   # unsigned installers in apps/desktop/src-tauri/target/release/bundle
+```
+
+- Click the tray icon to open the list, or use its menu (right click; on Linux, any click).
+- The count shows next to the icon on macOS, in the tooltip on Windows, and in the first line of the tray menu on Linux (also next to the icon where the desktop supports labels). The icon itself does not change yet.
+- On Linux, KDE shows the tray icon; GNOME shows it only with the AppIndicator extension.
+- Launch at login is off until you turn it on in the app.
+- Version 1 is read-only: it never publishes, discards or approves anything.
+
 ## Custom sandboxes
 
 Implement `Sandbox` from `autoforge` to run sessions somewhere else (E2B, Daytona, a VM).
@@ -191,7 +216,8 @@ receives `{ signal }`: stop and clean up when it aborts.
 
 ## Roadmap
 
-Next: a menu-bar app on top of the `autoforge serve` status endpoint.
+Next: the desktop app's visual design, then Publish and Discard from the app, desktop
+notifications and signed installers.
 
 ## Licence
 

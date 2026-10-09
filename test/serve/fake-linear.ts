@@ -18,10 +18,12 @@ export class FakeLinear implements LinearApi {
   constructor(private readonly now: () => Date) {}
 
   addIssue(fields: Partial<LinearIssue> & { id: string }): LinearIssue {
+    const identifier = fields.identifier ?? `ENG-${this.issues.size + 1}`;
     const issue: LinearIssue = {
-      identifier: `ENG-${this.issues.size + 1}`,
+      identifier,
       title: "Fix the greeting",
       description: "Make it friendlier.",
+      url: `https://linear.app/acme/issue/${identifier}`,
       updatedAt: this.now().toISOString(),
       assigneeId: ME.id,
       stateType: "unstarted",

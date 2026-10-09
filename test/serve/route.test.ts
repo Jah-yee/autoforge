@@ -8,6 +8,7 @@ const issue = (fields: Partial<LinearIssue> = {}): LinearIssue => ({
   identifier: "OPS-1",
   title: "T",
   description: null,
+  url: "https://linear.app/acme/issue/OPS-1/t",
   updatedAt: "2026-10-09T12:00:00.000Z",
   assigneeId: "me",
   stateType: "unstarted",

@@ -31,6 +31,7 @@ const rawIssue = (id: string, commentTimes: string[] = []) => ({
   identifier: "ENG-1",
   title: "T",
   description: null,
+  url: "https://linear.app/acme/issue/ENG-1/t",
   updatedAt: "2026-10-09T12:00:00.000Z",
   assignee: { id: "u1" },
   state: { type: "unstarted" },
@@ -71,6 +72,7 @@ describe("LinearClient", () => {
       identifier: "ENG-1",
       title: "T",
       description: null,
+      url: "https://linear.app/acme/issue/ENG-1/t",
       updatedAt: "2026-10-09T12:00:00.000Z",
       assigneeId: "u1",
       stateType: "unstarted",
@@ -97,6 +99,7 @@ describe("LinearClient", () => {
       filter: { assignee: { isMe: { eq: true } }, updatedAt: { gt: "2026-10-09T00:00:00.000Z" } },
     });
     expect(calls[1]?.variables.after).toBe("cursor-1");
+    expect(calls[0]?.query).toMatch(/\burl\b/);
   });
 
   it("also asks for tracked issues by id", async () => {

@@ -1,0 +1,16 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "popover",
+  "description": "The popover: receive state events and call the app's own commands. No file system, shell, HTTP or plugin access.",
+  "windows": ["popover"],
+  "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "allow-current-state",
+    "allow-open-url",
+    "allow-hide-popover",
+    "allow-autostart-enabled",
+    "allow-set-autostart",
+    "allow-quit"
+  ]
+}

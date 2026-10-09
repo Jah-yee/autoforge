@@ -33,7 +33,9 @@
     "test": "vitest run",
     "lint": "eslint .",
     "format": "prettier --check .",
-    "fix": "prettier --write . && eslint --fix ."
+    "fix": "prettier --write . && eslint --fix .",
+    "desktop:dev": "pnpm --dir apps/desktop tauri dev",
+    "desktop:build": "pnpm --dir apps/desktop tauri build"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -17,6 +17,8 @@ export type IssueStatus =
 export type IssueEntry = {
   /** For example "ENG-123". */
   identifier: string;
+  /** Linear page of the issue. Missing on entries written before slice 3 until the next poll. */
+  issueUrl?: string;
   status: IssueStatus;
   repo: string;
   ref: string;
