@@ -63,6 +63,8 @@ const CONFIG_KEYS = [
 const AGENT_KEYS = ["image", "command", "envFrom", "timeoutMinutes"];
 const RULE_KEYS = ["linearProject", "linearTeam", "repo", "agent"];
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+/** autoforge's own credentials: they never reach the sandbox. */
+const RESERVED_ENV = ["LINEAR_API_KEY", "GITHUB_TOKEN", "CLONE_TOKEN"];
 const REPO_SPEC = /^([A-Za-z0-9-]+\/[A-Za-z0-9._-]+)(?:@(.*))?$/;
 
 type Obj = Record<string, unknown>;
@@ -157,6 +159,10 @@ function parseAgent(v: unknown, path: string, partial: boolean): Partial<AgentCo
       ENV_NAME,
       [],
     );
+    const reserved = out.envFrom.find((n) => RESERVED_ENV.includes(n));
+    if (reserved) {
+      fail(`${path}.envFrom must not include ${reserved}: autoforge never passes it to the agent`);
+    }
   }
   if (has("timeoutMinutes")) out.timeoutMinutes = num(v, "timeoutMinutes", path, 30, 1, false);
   return out;

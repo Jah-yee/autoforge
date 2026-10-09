@@ -112,6 +112,24 @@ describe("parseConfig", () => {
     expect(() => parseConfig(raw)).toThrow(ConfigError);
     expect(() => parseConfig(raw)).toThrow(field);
   });
+
+  it.each(["LINEAR_API_KEY", "GITHUB_TOKEN", "CLONE_TOKEN"])(
+    "refuses to pass %s to the agent",
+    (name) => {
+      const top = { agent: { ...minimal.agent, envFrom: [name] } };
+      expect(() => parseConfig(top)).toThrow(ConfigError);
+      expect(() => parseConfig(top)).toThrow(
+        `config.agent.envFrom must not include ${name}: autoforge never passes it to the agent`,
+      );
+      const rule = {
+        ...minimal,
+        rules: [{ linearTeam: "ENG", repo: "me/a", agent: { envFrom: [name] } }],
+      };
+      expect(() => parseConfig(rule)).toThrow(
+        `config.rules[0].agent.envFrom must not include ${name}`,
+      );
+    },
+  );
 });
 
 describe("parseRepoSpec", () => {
