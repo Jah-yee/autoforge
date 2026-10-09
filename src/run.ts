@@ -125,9 +125,16 @@ export async function run(options: RunOptions): Promise<RunResult> {
     };
 
     emit({ type: "phase", phase: "cloning" });
-    const auth = authHeader ? ["-c", `http.extraHeader=${authHeader}`] : [];
-    const clone = await exec(["git", ...auth, "clone", "--quiet", "--", repo.url, w], {
-      env: GIT_ENV,
+    // Via env, not argv: with Docker the argv is visible in the host's process list.
+    const auth: Record<string, string> = authHeader
+      ? {
+          GIT_CONFIG_COUNT: "1",
+          GIT_CONFIG_KEY_0: "http.extraHeader",
+          GIT_CONFIG_VALUE_0: authHeader,
+        }
+      : {};
+    const clone = await exec(["git", "clone", "--quiet", "--", repo.url, w], {
+      env: { ...GIT_ENV, ...auth },
       signal,
     });
     if (signal.aborted) return stopped();

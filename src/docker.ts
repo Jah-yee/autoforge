@@ -32,6 +32,7 @@ export class DockerSandbox implements Sandbox {
     const started = await proc("docker", [
       "run",
       "-d",
+      "--rm",
       "--label",
       "autoforge=1",
       "--cpus",

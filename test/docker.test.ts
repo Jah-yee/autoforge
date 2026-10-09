@@ -43,6 +43,23 @@ describe.skipIf(!dockerUp && !process.env.AUTOFORGE_REQUIRE_DOCKER)(
       }
     });
 
+    it("stops the process inside the container on abort", async () => {
+      const s = await ctx.sandbox().create();
+      try {
+        const ac = new AbortController();
+        const running = s.exec(["sleep", "300"], { signal: ac.signal });
+        setTimeout(() => ac.abort(), 500);
+        await running;
+        let out = "";
+        await s.exec(["sh", "-c", "ps -eo pid,comm | grep -c sleep || true"], {
+          onStdout: (c) => (out += c),
+        });
+        expect(out.trim()).toBe("1"); // only PID 1
+      } finally {
+        await s.destroy();
+      }
+    });
+
     it("runs the agent as a non-root user", async () => {
       const r = await run(options(ctx, "id"));
       expect(r.logs.split("\n")).toContain("1000");
@@ -61,7 +78,7 @@ describe.skipIf(!dockerUp && !process.env.AUTOFORGE_REQUIRE_DOCKER)(
       expect(r).toMatchObject({ status: "failed", reason: "clone_failed" });
     });
 
-    it("passes env values without putting them on the docker command line", async () => {
+    it("masks env values passed to the agent", async () => {
       const r = await run(
         options(ctx, "echo-env", {
           agent: { command: fakeAgent("echo-env"), env: { SECRET_KEY: "sk-docker-123456" } },

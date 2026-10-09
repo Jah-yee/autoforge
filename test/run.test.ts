@@ -92,6 +92,30 @@ describe("tokens", () => {
     expect(r.logs).not.toContain("***");
     expect(r.logs).not.toContain("Authorization");
   });
+
+  it("keeps the token out of every exec argv (it travels in env)", async () => {
+    const token = "ghp_secrettoken123";
+    const argvs: string[][] = [];
+    const inner = new TempDirSandbox();
+    const sandbox: Sandbox = {
+      create: async () => {
+        const s = await inner.create();
+        return {
+          ...s,
+          exec: (cmd, o) => {
+            argvs.push(cmd);
+            return s.exec(cmd, o);
+          },
+        };
+      },
+    };
+    const r = await run({ ...base(), sandbox, repo: { url: repo.bare, ref: "main", token } });
+    expect(r.status).toBe("no_changes");
+    const b64 = Buffer.from(`x-access-token:${token}`).toString("base64");
+    const flat = argvs.flat();
+    expect(argvs.length).toBeGreaterThan(0);
+    expect(flat.some((a) => a.includes(token) || a.includes(b64))).toBe(false);
+  });
 });
 
 describe("sandbox failures", () => {
