@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -186,5 +187,46 @@ describe("autoforge cli", () => {
     } finally {
       await server.close();
     }
+  });
+
+  it("serve refuses to start while another instance holds the lock", async () => {
+    const d = await withConfig();
+    await writeFile(join(d, "serve.lock"), String(process.ppid)); // alive, and not us
+    const t = capture({ env: { LINEAR_API_KEY: "k", GITHUB_TOKEN: "g" } });
+    expect(await main(["serve", "--dir", d], t.io)).toBe(1);
+    expect(t.err).toEqual([`autoforge serve is already running (pid ${process.ppid}).`]);
+    expect(await readFile(join(d, "serve.lock"), "utf8")).toBe(String(process.ppid));
+    expect(existsSync(join(d, "state.json"))).toBe(false);
+  });
+
+  it("serve replaces a stale lock and removes it on shutdown", async () => {
+    const d = await withConfig();
+    const dead = spawnSync("true").pid;
+    await writeFile(join(d, "serve.lock"), String(dead));
+    const stop = new AbortController();
+    let lockDuringPoll = "";
+    const fetch = (async (_url: string | URL | Request, init: RequestInit = {}) => {
+      const { query } = JSON.parse(String(init.body)) as { query: string };
+      if (query.includes("viewer")) return gql({ viewer: { id: "u1", name: "Me" } });
+      lockDuringPoll = await readFile(join(d, "serve.lock"), "utf8");
+      stop.abort();
+      return gql({ issues: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } });
+    }) as typeof globalThis.fetch;
+    const t = capture({
+      signal: stop.signal,
+      fetch,
+      env: { LINEAR_API_KEY: "k", GITHUB_TOKEN: "g" },
+    });
+    expect(await main(["serve", "--dir", d], t.io)).toBe(0);
+    expect(lockDuringPoll).toBe(String(process.pid));
+    expect(existsSync(join(d, "serve.lock"))).toBe(false);
+  });
+
+  it("serve releases the lock when the daemon fails to start", async () => {
+    const d = await withConfig();
+    const fetch = (async () => new Response("nope", { status: 500 })) as typeof globalThis.fetch;
+    const t = capture({ fetch, env: { LINEAR_API_KEY: "k", GITHUB_TOKEN: "g" } });
+    expect(await main(["serve", "--dir", d], t.io)).toBe(1);
+    expect(existsSync(join(d, "serve.lock"))).toBe(false);
   });
 });

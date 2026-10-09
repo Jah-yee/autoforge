@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 import { realpathSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { DockerSandbox } from "../docker.js";
-import { ConfigError, loadConfig, readEnvFile, readSecrets } from "./config.js";
+import { ConfigError, loadConfig, readEnvFile, readSecrets, type Config } from "./config.js";
 import { Daemon, type RunSummary } from "./daemon.js";
 import { LinearClient } from "./linear.js";
 import { installService, uninstallService } from "./service.js";
@@ -70,6 +70,51 @@ async function serve(dir: string, io: CliIo): Promise<number> {
   const env = { ...(await readEnvFile(dir)), ...io.env };
   const config = await loadConfig(dir);
   const { linearApiKey } = readSecrets(config, env);
+  const lock = join(dir, "serve.lock");
+  const holder = await takeLock(lock);
+  if (holder) {
+    io.err(`autoforge serve is already running (pid ${holder}).`);
+    return 1;
+  }
+  try {
+    return await run(dir, io, config, env, linearApiKey);
+  } finally {
+    await rm(lock, { force: true });
+  }
+}
+
+/** One daemon per state dir. Returns the pid of a live holder, or null once the lock is ours. */
+async function takeLock(path: string): Promise<number | null> {
+  for (;;) {
+    try {
+      await writeFile(path, String(process.pid), { flag: "wx", mode: 0o600 });
+      return null;
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+    }
+    const pid = Number(await readFile(path, "utf8").catch(() => ""));
+    if (pid > 0 && pid !== process.pid && alive(pid)) return pid;
+    // ponytail: stale-lock takeover can race a second starter; the O_EXCL retry settles it.
+    await rm(path, { force: true });
+  }
+}
+
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === "EPERM"; // exists, owned by someone else
+  }
+}
+
+async function run(
+  dir: string,
+  io: CliIo,
+  config: Config,
+  env: Record<string, string | undefined>,
+  linearApiKey: string,
+): Promise<number> {
   const log = (entry: object) =>
     io.out(JSON.stringify({ time: new Date().toISOString(), ...entry }));
   const daemon = new Daemon({
