@@ -1,0 +1,865 @@
+/* Linked from index.html, never injected: the CSP allows only same-origin stylesheets. */
+:root {
+  color-scheme: light;
+  --ground: #e9e9ec;
+  --panel: #fbfbfc;
+  --chip: #f0f0f3;
+  --ink: #18181b;
+  --muted: #66666d;
+  --faint: #b4b4bb;
+  --line: rgb(0 0 0 / 0.08);
+  --coral: #ef5350;
+  --coral-ink: #c62f2c;
+  --green: #22a447;
+  --radius: 18px;
+  font:
+    13px/1.4 system-ui,
+    -apple-system,
+    "Segoe UI",
+    Ubuntu,
+    sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --ground: #000;
+    --panel: #1a1a1d;
+    --chip: #242428;
+    --ink: #f2f2f4;
+    --muted: #8e8e96;
+    --faint: #4a4a50;
+    --line: rgb(255 255 255 / 0.08);
+    --coral: #ff5c5c;
+    --coral-ink: #ff6b6b;
+    --green: #30c158;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: transparent; /* the window is transparent; #app draws the rounded panel */
+  color: var(--ink);
+}
+
+::selection {
+  background: color-mix(in srgb, var(--coral) 35%, transparent);
+}
+
+button,
+input,
+summary {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+h1,
+h2,
+p,
+ul,
+dl,
+dd {
+  margin: 0;
+  padding: 0;
+}
+
+ul {
+  list-style: none;
+}
+
+/* Wide panel: top bar over a hero card and the runs card. */
+#app {
+  height: 100%;
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 8px;
+  padding: 6px 10px 10px;
+  border-radius: 24px;
+  background: var(--ground);
+}
+
+.hero,
+.runs {
+  min-height: 0;
+  background: var(--panel);
+  border-radius: var(--radius);
+}
+
+.icon {
+  display: inline-grid;
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+.icon svg {
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Top bar */
+nav {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+[data-pill] {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+[data-pill]::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--faint);
+}
+
+[data-pill][data-tone="ok"]::before {
+  background: var(--green);
+}
+
+[data-pill][data-tone="bad"]::before {
+  background: var(--coral);
+}
+
+.menu {
+  position: relative;
+}
+
+.menu summary {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  color: var(--muted);
+  list-style: none;
+}
+
+.menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.menu summary:hover,
+.menu[open] summary {
+  background: var(--panel);
+  color: var(--ink);
+}
+
+.menu > div {
+  position: absolute;
+  top: 34px;
+  right: 0;
+  z-index: 10;
+  display: grid;
+  gap: 2px;
+  min-width: 180px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--chip);
+  box-shadow: 0 10px 28px rgb(0 0 0 / 0.28);
+}
+
+.menu label,
+.menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  text-align: left;
+}
+
+.menu label:hover,
+.menu button:hover {
+  background: var(--line);
+}
+
+.menu input {
+  margin: 0;
+  accent-color: var(--green);
+}
+
+/* Hero card */
+.hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 18px 10px 8px;
+}
+
+.hero .mascot {
+  width: 100px;
+  height: 100px;
+}
+
+.hero > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.title .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--faint);
+}
+
+.title .dot:is([data-mood="waiting"], [data-mood="sad"]) {
+  background: var(--coral);
+}
+
+.title .dot:is([data-mood="working"], [data-mood="happy"]) {
+  background: var(--green);
+}
+
+.title .dot[data-mood="idle"] {
+  background: var(--muted);
+}
+
+h1 {
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+[data-activity] {
+  display: flex;
+  gap: 3px;
+  margin-left: auto;
+}
+
+[data-activity] span {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--faint);
+}
+
+[data-activity] [data-status="published"] {
+  background: var(--green);
+}
+
+[data-activity] :is([data-status="failed"], [data-status="timed_out"]) {
+  background: var(--coral);
+}
+
+[data-summary] {
+  margin: 2px 0 10px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.mascot[data-mood="waiting"] ~ div [data-summary] {
+  color: var(--coral-ink);
+}
+
+dl {
+  display: grid;
+  gap: 7px;
+}
+
+[data-stat] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+[data-stat] dt {
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+
+[data-stat] dd {
+  font-weight: 650;
+}
+
+[data-stat="awaiting"] .icon {
+  color: var(--coral);
+}
+
+[data-stat="running"] .icon {
+  color: var(--green);
+}
+
+[data-stat="running"] .icon path {
+  fill: currentColor;
+}
+
+/* Runs card */
+.runs {
+  overflow-y: auto;
+  padding: 10px 8px 8px 10px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--faint) transparent;
+}
+
+.runs section + section {
+  margin-top: 10px;
+}
+
+h2 {
+  margin: 0 0 5px 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.runs ul {
+  display: grid;
+  gap: 4px;
+}
+
+[data-row] {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 1px 6px;
+  width: 100%;
+  padding: 7px 10px 7px 24px;
+  border: 0;
+  border-radius: 11px;
+  background: var(--chip);
+  text-align: left;
+  font-size: 12.5px;
+}
+
+[data-row]:not([aria-disabled]):hover {
+  background: color-mix(in srgb, var(--chip), var(--ink) 6%);
+}
+
+[data-row][aria-disabled] {
+  opacity: 0.7;
+}
+
+/* Status mark: shape and colour, never colour alone. */
+[data-row]::before {
+  content: "";
+  position: absolute;
+  top: 12px;
+  left: 10px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--faint);
+}
+
+[data-row]:is(
+    [data-status="awaiting_approval"],
+    [data-status="failed"],
+    [data-status="timed_out"]
+  )::before {
+  background: var(--coral);
+}
+
+[data-row]:is(
+    [data-status="running"],
+    [data-status="publishing"],
+    [data-status="published"]
+  )::before {
+  background: var(--green);
+}
+
+[data-row][data-status="queued"]::before {
+  background: none;
+  box-shadow: inset 0 0 0 1.5px var(--muted);
+}
+
+[data-row][data-status="awaiting_approval"]::before {
+  --pulse: color-mix(in srgb, var(--coral) 50%, transparent);
+  animation: pulse 1.8s ease-out infinite;
+}
+
+[data-row][data-status="running"]::before {
+  --pulse: color-mix(in srgb, var(--green) 50%, transparent);
+  animation: pulse 1.8s ease-out infinite;
+}
+
+/* Line one: identifier, status, time. Line two: repo and PR or hint. */
+[data-row]::after {
+  content: "";
+  order: 4;
+  flex-basis: 100%;
+}
+
+[data-part="identifier"] {
+  order: 1;
+  font-weight: 650;
+}
+
+[data-part="status"] {
+  order: 2;
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+[data-part="time"] {
+  order: 3;
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+[data-part="repo"] {
+  order: 5;
+}
+
+[data-part="pr"],
+[data-part="hint"] {
+  order: 6;
+}
+
+:is([data-part="repo"], [data-part="pr"], [data-part="hint"]) {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+[data-part="hint"] {
+  color: var(--coral-ink);
+}
+
+.sep {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Empty, not running and unreachable states. */
+.runs > p {
+  margin: 2px 4px 8px;
+  color: var(--muted);
+}
+
+.runs > p:first-child {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.runs > p:has(code) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+code {
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: var(--chip);
+  font:
+    12px ui-monospace,
+    "SF Mono",
+    Menlo,
+    Consolas,
+    monospace;
+}
+
+.runs > p > button {
+  padding: 3px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--chip);
+  font-size: 11.5px;
+}
+
+.runs > p > button:hover {
+  background: color-mix(in srgb, var(--chip), var(--ink) 8%);
+}
+
+@keyframes pulse {
+  from {
+    box-shadow: 0 0 0 0 var(--pulse);
+  }
+  to {
+    box-shadow: 0 0 0 6px transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-row]::before {
+    animation: none !important;
+  }
+}
+
+/*
+ * The character (CHARACTER in view.ts): a rubber-hose cube with a hammer. Parts with class "v"
+ * are hidden until a mood shows them; the face and pose carry the state, so every
+ * mood still reads with motion turned off.
+ */
+.mascot {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 76px;
+  height: 76px;
+}
+
+/* On a dark panel the ink outline would vanish: cut it out like a sticker. */
+@media (prefers-color-scheme: dark) {
+  .mascot svg {
+    filter: drop-shadow(1.2px 0 0 #f2f2f4) drop-shadow(-1.2px 0 0 #f2f2f4)
+      drop-shadow(0 1.2px 0 #f2f2f4) drop-shadow(0 -1.2px 0 #f2f2f4);
+  }
+}
+
+.mascot svg {
+  width: 90%;
+  height: 90%;
+  overflow: visible;
+  transform-origin: 50% 90%;
+}
+
+.mascot .ink {
+  stroke: #141416;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.mascot .ink:not([stroke-width]) {
+  stroke-width: 2.6;
+}
+
+.mascot .v {
+  display: none;
+}
+
+/* Limbs turn around their shoulder or hip. */
+.mascot :is(.arm-l, .arm-r, .leg) {
+  transform-box: view-box;
+  transition: transform 400ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.mascot .arm-l {
+  transform-origin: 16px 28px;
+}
+
+.mascot .arm-r {
+  transform-origin: 62px 24px;
+}
+
+.mascot .leg:first-child {
+  transform-origin: 34px 46px;
+}
+
+.mascot .leg:nth-child(2) {
+  transform-origin: 46px 46px;
+}
+
+.mascot :is(.eye, .eyes, .spark, .zz path, .sweat, .question) {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* What each mood shows. */
+[data-mood="waiting"] :is(.eyes, .m-o),
+[data-mood="working"] :is(.eyes, .m-grin),
+[data-mood="happy"] :is(.eyes-happy, .m-grin, .sparkles),
+[data-mood="idle"] :is(.eyes, .m-grin),
+[data-mood="sad"] :is(.eyes, .lids, .m-frown, .sweat),
+[data-mood="asleep"] :is(.eyes-closed, .m-small, .zz),
+[data-mood="lost"] :is(.eyes, .m-wavy, .question) {
+  display: inline;
+}
+
+/* Pupils follow the mood: up at you when waiting, at the hammer when working. */
+.mascot .pupil {
+  transition: translate 300ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+[data-mood="waiting"] .pupil {
+  translate: -2px -3px;
+}
+
+[data-mood="working"] .pupil {
+  translate: 0.5px -3.5px;
+}
+
+/* The hammer rests at its side unless the mood says otherwise. */
+.mascot .arm-r {
+  transform: rotate(115deg);
+}
+
+/* idle: a soft rubber-hose bob and a blink. */
+[data-mood="idle"] svg {
+  animation: bob 1.8s ease-in-out infinite alternate;
+}
+
+[data-mood="idle"] .eye,
+[data-mood="waiting"] .eye {
+  animation: blink 4.2s infinite;
+}
+
+/* waiting: waves at you. */
+[data-mood="waiting"] .arm-l {
+  transform: rotate(125deg);
+  animation: wave 0.45s ease-in-out infinite alternate;
+}
+
+/* working: walks and swings the hammer. */
+[data-mood="working"] svg {
+  animation: bob 0.35s ease-in-out infinite alternate;
+}
+
+[data-mood="working"] .arm-r {
+  transform: rotate(-15deg);
+  animation: swing 0.7s cubic-bezier(0.5, 0, 0.75, 0) infinite alternate;
+}
+
+[data-mood="working"] .leg:first-child {
+  animation: walk 0.35s ease-in-out infinite alternate;
+}
+
+[data-mood="working"] .leg:nth-child(2) {
+  animation: walk 0.35s ease-in-out infinite alternate-reverse;
+}
+
+/* happy: jumps with the hammer up. */
+[data-mood="happy"] svg {
+  animation: jump 1.2s cubic-bezier(0.33, 0, 0.2, 1) infinite;
+}
+
+[data-mood="happy"] .arm-r {
+  transform: rotate(-12deg);
+}
+
+[data-mood="happy"] .arm-l {
+  transform: rotate(140deg);
+}
+
+[data-mood="happy"] .spark {
+  animation: twinkle 0.9s ease-in-out infinite alternate;
+}
+
+[data-mood="happy"] .spark:last-child {
+  animation-delay: -0.45s;
+}
+
+/* sad: slumped, hammer dragging, a bead of sweat. */
+[data-mood="sad"] svg {
+  transform: translateY(2px) scaleY(0.97);
+}
+
+[data-mood="sad"] .arm-r {
+  transform: rotate(135deg);
+}
+
+[data-mood="sad"] .sweat {
+  animation: drip 2.4s ease-in infinite;
+}
+
+/* asleep: dozing, z's drifting up. */
+[data-mood="asleep"] svg {
+  animation: breathe 3.6s ease-in-out infinite;
+}
+
+[data-mood="asleep"] .arm-r {
+  transform: rotate(130deg);
+}
+
+[data-mood="asleep"] .zz path {
+  animation: drift 3s ease-out infinite;
+}
+
+[data-mood="asleep"] .zz path:last-child {
+  animation-delay: -1.5s;
+}
+
+/* lost: scratches its head, eyes darting. */
+[data-mood="lost"] .arm-l {
+  transform: rotate(153deg);
+  animation: scratch 0.5s ease-in-out infinite alternate;
+}
+
+[data-mood="lost"] .eyes {
+  animation: look 3s ease-in-out infinite;
+}
+
+[data-mood="lost"] .question {
+  animation: bob 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes blink {
+  0%,
+  93%,
+  100% {
+    transform: scaleY(1);
+  }
+  96% {
+    transform: scaleY(0.1);
+  }
+}
+
+@keyframes bob {
+  to {
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes breathe {
+  50% {
+    transform: scale(1.03, 0.97);
+  }
+}
+
+@keyframes wave {
+  from {
+    transform: rotate(110deg);
+  }
+  to {
+    transform: rotate(145deg);
+  }
+}
+
+@keyframes swing {
+  from {
+    transform: rotate(-20deg);
+  }
+  to {
+    transform: rotate(60deg);
+  }
+}
+
+@keyframes walk {
+  from {
+    transform: rotate(-10deg);
+  }
+  to {
+    transform: rotate(10deg);
+  }
+}
+
+@keyframes jump {
+  0%,
+  45%,
+  100% {
+    transform: translateY(0) scale(1, 1);
+  }
+  10% {
+    transform: translateY(0) scale(1.06, 0.92);
+  }
+  25% {
+    transform: translateY(-8px) scale(0.96, 1.05);
+  }
+  38% {
+    transform: translateY(0) scale(1.04, 0.96);
+  }
+}
+
+@keyframes twinkle {
+  from {
+    opacity: 0.3;
+    scale: 0.6;
+  }
+  to {
+    opacity: 1;
+    scale: 1.15;
+  }
+}
+
+@keyframes drip {
+  0% {
+    translate: 0 0;
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    translate: 0 9px;
+    opacity: 0;
+  }
+}
+
+@keyframes drift {
+  0% {
+    translate: -2px 4px;
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    translate: 4px -8px;
+    opacity: 0;
+  }
+}
+
+@keyframes scratch {
+  from {
+    transform: rotate(147deg);
+  }
+  to {
+    transform: rotate(159deg);
+  }
+}
+
+@keyframes look {
+  0%,
+  100% {
+    translate: -2px 0;
+  }
+  45%,
+  55% {
+    translate: 2px 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mascot,
+  .mascot * {
+    animation: none !important;
+    transition: none !important;
+  }
+}

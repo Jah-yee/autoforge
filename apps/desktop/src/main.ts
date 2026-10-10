@@ -2,7 +2,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { Snapshot } from "./model";
-import { installKeys, tick, update, type Actions } from "./view";
+import { installGaze, installKeys, tick, update, type Actions } from "./view";
 
 const root = document.getElementById("app")!;
 let snap: Snapshot = {
@@ -31,6 +31,7 @@ const act: Actions = {
 };
 
 installKeys(root, act);
+installGaze(root);
 draw();
 let gotEvent = false;
 // Listen first so a snapshot emitted while current_state is in flight is not lost.
