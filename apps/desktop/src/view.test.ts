@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppState, Run, Snapshot } from "./model";
-import { installKeys, README_URL, tick, update, type Actions } from "./view";
+import { gaze, installKeys, README_URL, tick, update, type Actions } from "./view";
 
 const NOW = Date.parse("2026-10-09T12:00:00.000Z");
 const ago = (ms: number) => new Date(NOW - ms).toISOString();
@@ -279,5 +279,120 @@ describe("updates", () => {
     tick(root, NOW + 2 * MIN);
     expect(rows()[0]!.textContent).toContain("5 min ago");
     expect(text()).toContain("Updated 2 min ago");
+  });
+});
+
+describe("hero", () => {
+  const runs = [
+    run("a", { status: "awaiting_approval" }),
+    run("b", { status: "running" }),
+    run("c", { status: "queued" }),
+    run("d", { status: "queued" }),
+    run("e", { status: "failed", updatedAt: ago(30 * MIN) }),
+    run("f", { status: "published", updatedAt: ago(20 * MIN) }),
+  ];
+  const stats = () =>
+    [...root.querySelectorAll("[data-stat]")].map((e) => [
+      e.querySelector("dt")?.textContent,
+      e.querySelector("dd")?.textContent,
+    ]);
+
+  it("counts what awaits approval, runs and is queued", () => {
+    show(snap({ kind: "ok", runs }));
+    expect(stats()).toEqual([
+      ["Awaiting approval", "1"],
+      ["Running", "1"],
+      ["Queued", "2"],
+    ]);
+  });
+
+  it("shows no counts while the daemon is down", () => {
+    show(snap({ kind: "daemonNotRunning" }, null));
+    expect(stats()).toEqual([]);
+  });
+
+  it("draws recent runs as an activity strip, oldest first, hidden from screen readers", () => {
+    show(snap({ kind: "ok", runs }));
+    const strip = root.querySelector<HTMLElement>("[data-activity]")!;
+    expect(strip.getAttribute("aria-hidden")).toBe("true");
+    expect([...strip.children].map((e) => (e as HTMLElement).dataset.status)).toEqual([
+      "failed",
+      "published",
+    ]);
+  });
+
+  it("says in the status pill whether the daemon is connected", () => {
+    const pill = () => root.querySelector("[data-pill]")?.textContent;
+    show(snap({ kind: "ok", runs: [] }));
+    expect(pill()).toBe("Connected · Updated 5 s ago");
+    show(snap({ kind: "daemonNotRunning" }, null));
+    expect(pill()).toBe("Not running");
+    show(snap({ kind: "unauthorized" }));
+    expect(pill()).toBe("Disconnected · Updated 5 s ago");
+  });
+});
+
+describe("header", () => {
+  const header = () => ({
+    mood: root.querySelector<HTMLElement>("[data-mood]")?.dataset.mood,
+    summary: root.querySelector("[data-summary]")?.textContent,
+    hidden: root.querySelector("[data-mood]")?.getAttribute("aria-hidden"),
+  });
+
+  it("sleeps when the daemon is not running", () => {
+    show(snap({ kind: "daemonNotRunning" }, null));
+    expect(header()).toEqual({ mood: "asleep", summary: "Not running", hidden: "true" });
+  });
+
+  it("looks lost when the daemon cannot be reached or refuses the token", () => {
+    show(snap({ kind: "unreachable", reason: "timed out" }));
+    expect(header()).toMatchObject({ mood: "lost", summary: "Disconnected" });
+    show(snap({ kind: "unauthorized" }));
+    expect(header()).toMatchObject({ mood: "lost", summary: "Disconnected" });
+  });
+
+  it("waits on you before anything else", () => {
+    show(
+      snap({
+        kind: "ok",
+        runs: [run("a", { status: "running" }), run("b", { status: "awaiting_approval" })],
+      }),
+    );
+    expect(header()).toMatchObject({ mood: "waiting", summary: "1 awaiting approval" });
+  });
+
+  it("works while a run is running or publishing", () => {
+    show(snap({ kind: "ok", runs: [run("eng-1", { status: "publishing" })] }));
+    expect(header()).toMatchObject({ mood: "working", summary: "Working on ENG-1" });
+  });
+
+  it("is happy for an hour after the latest run published", () => {
+    show(snap({ kind: "ok", runs: [run("eng-1", { status: "published" })] }));
+    expect(header()).toMatchObject({ mood: "happy", summary: "Published ENG-1" });
+  });
+
+  it("is sad for an hour after the latest run failed or timed out", () => {
+    const runs = [
+      run("eng-1", { status: "published", updatedAt: ago(30 * MIN) }),
+      run("eng-2", { status: "failed", updatedAt: ago(2 * MIN) }),
+    ];
+    show(snap({ kind: "ok", runs }));
+    expect(header()).toMatchObject({ mood: "sad", summary: "ENG-2 failed" });
+    show(snap({ kind: "ok", runs: [run("eng-3", { status: "timed_out" })] }));
+    expect(header()).toMatchObject({ mood: "sad", summary: "ENG-3 timed out" });
+  });
+
+  it("turns the cursor's offset from an eye into a small pupil offset that never leaves the eye", () => {
+    expect(gaze(0, 0)).toEqual([0, 0]);
+    expect(gaze(8, 0)).toEqual([1, 0]);
+    expect(gaze(800, 0)).toEqual([2.5, 0]);
+    expect(gaze(-300, 400)).toEqual([-1.5, 2]);
+  });
+
+  it("idles when nothing needs it and nothing just finished", () => {
+    show(snap({ kind: "ok", runs: [run("a", { status: "published", updatedAt: ago(61 * MIN) })] }));
+    expect(header()).toMatchObject({ mood: "idle", summary: "Idle" });
+    show(snap({ kind: "ok", runs: [run("b", { status: "discarded" })] }));
+    expect(header()).toMatchObject({ mood: "idle", summary: "Idle" });
   });
 });
