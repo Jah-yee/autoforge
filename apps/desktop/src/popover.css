@@ -488,6 +488,7 @@ h2 {
 }
 
 .runs > p:has(code) {
+  margin-block: 0 4px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -495,11 +496,12 @@ h2 {
 }
 
 code {
-  padding: 3px 7px;
+  padding: 3px 6px;
+  white-space: nowrap;
   border-radius: 6px;
   background: var(--chip);
   font:
-    12px ui-monospace,
+    11.5px ui-monospace,
     "SF Mono",
     Menlo,
     Consolas,
