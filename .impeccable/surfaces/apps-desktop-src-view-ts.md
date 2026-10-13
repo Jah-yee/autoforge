@@ -2,7 +2,7 @@
 version: 1
 slug: "apps-desktop-src-view-ts"
 primary_target: "apps/desktop/src/view.ts"
-related_targets: ["apps/desktop/index.html","apps/desktop/src/popover.css"]
+related_targets: ["apps/desktop/index.html", "apps/desktop/src/popover.css"]
 ---
 
 Scope: autoforge desktop tray popover (apps/desktop), Operate mode. Redesign (2026-10-13): the previous near-black kawaii-cube world is replaced; treat it as evidence only. Panel is 400 px wide with adaptive height: short when idle, growing with the run list up to a cap, then scrolling.
