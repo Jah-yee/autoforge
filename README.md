@@ -219,6 +219,6 @@ receives `{ signal }`: stop and clean up when it aborts.
 Next: the desktop app's visual design, then Publish and Discard from the app, desktop
 notifications and signed installers.
 
-## Licence
+## License
 
 MIT
