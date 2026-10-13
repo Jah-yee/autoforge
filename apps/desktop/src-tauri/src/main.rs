@@ -288,8 +288,15 @@ fn main() {
                 hidden_at: Mutex::new(None),
                 summary: summary.clone(),
             });
+            // macOS: a black silhouette the menu bar recolours for light and dark (a template).
+            // Elsewhere template is ignored, so the full-colour app icon stays visible on any
+            // taskbar.
+            #[cfg(target_os = "macos")]
+            let icon = tauri::include_image!("icons/tray-template.png");
+            #[cfg(not(target_os = "macos"))]
+            let icon = app.default_window_icon().cloned().ok_or("no app icon")?;
             TrayIconBuilder::with_id(TRAY)
-                .icon(app.default_window_icon().cloned().ok_or("no app icon")?)
+                .icon(icon)
                 .icon_as_template(true)
                 .tooltip("autoforge")
                 .menu(&Menu::with_items(app, &[&summary, &open, &quit])?)
