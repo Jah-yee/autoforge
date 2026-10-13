@@ -28,11 +28,7 @@
   --scale: #868d95;
   --hot: #6b3d8c;
   --on-hot: #fbf8f2;
-  --steel: #b3bac1;
-  --steel-hi: #e3e7ea;
-  --steel-dark: #6f7780;
   --m-ink: #1d1916;
-  --chalk: #fbf8f2;
   --display: "Big Shoulders", system-ui, sans-serif;
   font:
     13px/1.4 system-ui,
@@ -58,7 +54,6 @@
     --blue: #6e9be0;
     --scale: #9aa1a8;
     --hot: #5d3580;
-    --steel: #a7aeb5;
   }
 }
 
@@ -75,7 +70,7 @@ body {
 }
 
 ::selection {
-  background: color-mix(in srgb, var(--straw) 50%, transparent);
+  background: color-mix(in srgb, var(--ink) 18%, transparent);
 }
 
 button,
@@ -164,9 +159,9 @@ ul {
 .hero {
   display: grid;
   grid-template-columns: 112px 1fr;
-  column-gap: 14px;
+  column-gap: 16px;
   align-items: end;
-  padding: 14px 16px 0;
+  padding: 16px 16px 0;
   border-bottom: 3px solid var(--ink);
 }
 
@@ -174,13 +169,13 @@ ul {
   display: grid;
   gap: 4px;
   min-width: 0;
-  padding-bottom: 14px;
+  padding-bottom: 16px;
 }
 
 .title {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 h1 {
@@ -194,7 +189,7 @@ h1 {
 [data-activity] {
   display: flex;
   align-items: end;
-  gap: 3px;
+  gap: 4px;
   margin-left: auto;
 }
 
@@ -206,7 +201,6 @@ h1 {
 }
 
 [data-activity] :is([data-status="failed"], [data-status="timed_out"]) {
-  height: 8px;
   background: none;
   box-shadow: inset 0 0 0 1.5px var(--scale);
 }
@@ -225,8 +219,8 @@ h1 {
 /* The counts read as a small temper chart. */
 dl {
   display: grid;
-  gap: 3px;
-  margin-top: 6px;
+  gap: 4px;
+  margin-top: 8px;
 }
 
 [data-stat] {
@@ -248,14 +242,25 @@ dl {
   font-weight: 700;
 }
 
+[data-stat][data-zero] dd {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+[data-stat][data-zero] .bar {
+  opacity: 0.4;
+}
+
 /* Runs */
 .runs {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  max-height: 380px;
-  padding: 10px 8px 8px;
+  gap: 8px;
+  max-height: 392px;
+  padding: 8px;
   overflow-y: auto;
+  /* Fades the last 16px so a row cut by the scroll edge reads as "more below". */
+  mask-image: linear-gradient(#000 calc(100% - 16px), transparent);
   scrollbar-width: thin;
   scrollbar-color: var(--rule) transparent;
 }
@@ -270,10 +275,14 @@ dl {
   background: var(--rule);
 }
 
+section + section {
+  margin-top: 8px;
+}
+
 h2 {
-  margin: 2px 10px 4px;
+  margin: 0 8px 8px;
   font:
-    700 12.5px/1.2 var(--display),
+    700 12.5px/16px var(--display),
     sans-serif;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -282,7 +291,7 @@ h2 {
 
 /* What waits on you is the hot bar at the top, until you act. */
 section[aria-labelledby="awaiting"] {
-  padding: 10px 4px 4px;
+  padding: 8px 0;
   border-radius: 12px;
   background: var(--hot);
   color: var(--on-hot);
@@ -295,15 +304,25 @@ section[aria-labelledby="awaiting"] .bar {
   background: var(--on-hot);
 }
 
+/* Inside the hot bar a hover underlines the identifier instead of drawing a card in a card. */
+section[aria-labelledby="awaiting"] [data-row]:not([aria-disabled]):hover {
+  background: none;
+}
+
+section[aria-labelledby="awaiting"] [data-row]:not([aria-disabled]):hover [data-part="identifier"] {
+  text-decoration: underline 2px;
+  text-underline-offset: 3px;
+}
+
 [data-row] {
   position: relative;
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   column-gap: 8px;
-  row-gap: 1px;
   width: 100%;
-  padding: 7px 10px 7px 38px;
+  padding: 4px 8px 4px 40px;
+  line-height: 16px;
   border: 0;
   border-radius: 9px;
   background: none;
@@ -322,7 +341,7 @@ section[aria-labelledby="awaiting"] .bar {
 [data-row] > .bar {
   position: absolute;
   top: 12px;
-  left: 10px;
+  left: 12px;
 }
 
 /* Line one: identifier and time. Line two: repo, status, PR; then the approval hint. */
@@ -335,7 +354,7 @@ section[aria-labelledby="awaiting"] .bar {
 [data-part="identifier"] {
   order: 1;
   font:
-    700 16px/1.15 var(--display),
+    700 16px/24px var(--display),
     sans-serif;
   letter-spacing: 0.01em;
 }
@@ -376,7 +395,6 @@ section[aria-labelledby="awaiting"] .bar {
 [data-part="hint"] {
   order: 7;
   flex-basis: 100%;
-  margin-top: 2px;
   font-weight: 650;
 }
 
@@ -400,6 +418,10 @@ section[aria-labelledby="awaiting"] .bar {
   font-weight: 650;
 }
 
+.runs > p:only-child {
+  font-weight: 400;
+}
+
 .runs > p:has(> button) {
   display: flex;
   align-items: center;
@@ -421,7 +443,7 @@ code {
 }
 
 .runs > p > button {
-  padding: 3px 10px;
+  padding: 4px 8px;
   border: 1px solid var(--rule);
   border-radius: 999px;
   background: none;
@@ -438,20 +460,17 @@ footer {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 4px 8px 4px 16px;
+  padding: 8px 8px 8px 16px;
   border-top: 1px solid var(--rule);
   font-size: 11.5px;
   color: var(--muted);
 }
 
-[data-pill] {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
 [data-pill]::before {
   content: "";
+  display: inline-block;
+  margin-right: 8px;
+  vertical-align: 1px;
   width: 7px;
   height: 7px;
   border-radius: 50%;
@@ -459,7 +478,7 @@ footer {
 }
 
 [data-pill][data-tone="ok"]::before {
-  background: var(--blue);
+  background: var(--ink); /* temper hues mean run state only */
 }
 
 [data-pill][data-tone="bad"]::before {
@@ -481,6 +500,10 @@ footer {
   stroke-linecap: round;
 }
 
+.icon circle {
+  fill: currentColor;
+}
+
 .menu {
   position: relative;
 }
@@ -488,8 +511,8 @@ footer {
 .menu summary {
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   list-style: none;
 }
@@ -512,7 +535,7 @@ footer {
   display: grid;
   gap: 2px;
   min-width: 180px;
-  padding: 6px;
+  padding: 8px;
   border: 1px solid var(--rule);
   border-radius: 12px;
   background: var(--ground);
@@ -540,7 +563,7 @@ footer {
 
 .menu input {
   margin: 0;
-  accent-color: var(--blue);
+  accent-color: var(--ink);
 }
 
 /*

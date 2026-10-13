@@ -19,7 +19,7 @@ OWN-WORLD: the steel tempering chart as the only hues: straw (queued), bronze (r
 
 STORY: open, read the smith's mood and one summary line; a run awaiting you sits at the top as the hot bar until you act (raise from feed); below, running, queued, recent; click a row to open its PR or issue.
 
-FIRST VIEWPORT: 400 px wide. Top: smith at 88 px left on the anvil line, wordmark, summary and the connection line right. Then the hot bar (only when something awaits approval). Then the temper list. Footer: connection line and settings menu (opens upward).
+FIRST VIEWPORT: 400 px wide, height follows content. Top: the ember mascot left, standing on a 3 px bench line; right of it the wordmark with a rack of the last ten runs as temper bar ends, the one-line summary, and a small temper legend with counts (zero counts dimmed). Then the hot bar (only when something awaits approval), then the temper list, scrolling past 392 px with a faded edge. Footer: connection line and settings menu (opens upward). Spacing snaps to the 8 px cell; rows are 48 px (64 with the approval hint).
 
 FORM: assigned grounded candidate 7 of 7 (the forge, the name's literal reading); seed key c66b0967. Code-led, no comp.
 

@@ -197,7 +197,7 @@ const CHARACTER = `<svg viewBox="0 0 100 92">
 
 /** Small line icons, drawn once (constants, so setting them as markup carries no run data). */
 const ICON = {
-  settings: `<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.8v2M8 12.2v2M1.8 8h2M12.2 8h2M3.6 3.6l1.4 1.4M11 11l1.4 1.4M3.6 12.4 5 11M11 5l1.4-1.4"/></svg>`,
+  settings: `<svg viewBox="0 0 16 16"><path d="M2.5 5h11M2.5 11h11"/><circle cx="6" cy="5" r="1.8"/><circle cx="10.5" cy="11" r="1.8"/></svg>`,
 };
 
 function icon(name: keyof typeof ICON): HTMLElement {
@@ -257,7 +257,12 @@ function hero(view: View): HTMLElement {
   for (const r of (g?.recent ?? []).slice(0, 10).reverse())
     strip.append(h("span", { "data-status": r.status }));
   const stat = (status: string, label: string, n: number) =>
-    h("div", { "data-stat": status }, h("dt", {}, bar(status), label), h("dd", {}, String(n)));
+    h(
+      "div",
+      { "data-stat": status, ...(n ? {} : { "data-zero": "" }) },
+      h("dt", {}, bar(status), label),
+      h("dd", {}, String(n)),
+    );
   return h(
     "div",
     { class: "hero" },
