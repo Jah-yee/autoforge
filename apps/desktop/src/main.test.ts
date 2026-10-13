@@ -1,14 +1,16 @@
 import { beforeEach, expect, it, vi } from "vitest";
 
 const calls: string[] = [];
+const heights: unknown[] = [];
 const state = { kind: "ok", runs: [] as unknown[] };
 const autostart = false;
 const failSet = true;
 let failRead = false;
 let failState = false;
 vi.mock("@tauri-apps/api/core", () => ({
-  invoke: async (cmd: string) => {
+  invoke: async (cmd: string, args?: { height?: number }) => {
     calls.push(cmd);
+    if (cmd === "fit_popover") heights.push(args?.height);
     if (cmd === "current_state") {
       if (failState) throw new Error("down");
       return { state, lastOkAt: null };
@@ -55,4 +57,23 @@ it("draws the unreachable state when current_state rejects", async () => {
   failState = true;
   await import("./main");
   expect(document.body.textContent).toContain("Can't reach the daemon");
+});
+
+it("fits the window to the panel's height whenever the panel resizes", async () => {
+  let resized = () => {};
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(cb: () => void) {
+        resized = cb;
+      }
+      observe() {}
+    },
+  );
+  heights.length = 0;
+  await import("./main");
+  Object.defineProperty(document.getElementById("app"), "offsetHeight", { value: 312 });
+  resized();
+  expect(heights).toEqual([312]);
+  vi.unstubAllGlobals();
 });

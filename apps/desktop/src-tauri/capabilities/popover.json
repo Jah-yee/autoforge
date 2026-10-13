@@ -9,6 +9,7 @@
     "allow-current-state",
     "allow-open-url",
     "allow-hide-popover",
+    "allow-fit-popover",
     "allow-autostart-enabled",
     "allow-set-autostart",
     "allow-quit"

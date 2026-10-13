@@ -92,6 +92,44 @@ fn popover_origin(
     )
 }
 
+/// New top edge for a popover resized from `old_h` to `new_h`: one in the top half of its monitor
+/// grows down (the menu bar edge stays put), one in the bottom half grows up (the taskbar edge
+/// stays put), and either way it stays on screen. Physical pixels.
+fn refit_top(top: f64, old_h: f64, new_h: f64, monitor_top: f64, monitor_h: f64) -> f64 {
+    let y = if top + old_h / 2.0 < monitor_top + monitor_h / 2.0 {
+        top
+    } else {
+        top + old_h - new_h
+    };
+    y.min(monitor_top + monitor_h - new_h).max(monitor_top)
+}
+
+/// Resizes the popover to `height` logical pixels of content, keeping its tray-side edge in place.
+#[tauri::command]
+fn fit_popover(window: WebviewWindow, height: f64) {
+    let resize = || -> Option<()> {
+        let scale = window.scale_factor().ok()?;
+        let new_h = (height.clamp(120.0, 640.0) * scale).round();
+        let size = window.outer_size().ok()?;
+        let pos = window.outer_position().ok()?;
+        let monitor = window.current_monitor().ok()??;
+        let top = refit_top(
+            pos.y.into(),
+            size.height.into(),
+            new_h,
+            monitor.position().y.into(),
+            monitor.size().height.into(),
+        );
+        window
+            .set_size(tauri::PhysicalSize::new(size.width, new_h as u32))
+            .ok()?;
+        window
+            .set_position(PhysicalPosition::new(pos.x, top as i32))
+            .ok()
+    };
+    resize();
+}
+
 /// Shows the popover near `near` (a tray click), or centred when there is no click position
 /// (the tray menu, a second launch, Linux where tray clicks are not reported).
 fn show_popover(app: &AppHandle, near: Option<PhysicalPosition<f64>>) {
@@ -221,6 +259,7 @@ fn main() {
             current_state,
             open_url,
             hide_popover,
+            fit_popover,
             autostart_enabled,
             set_autostart,
             quit
@@ -281,7 +320,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{own_page, popover_origin};
+    use super::{own_page, popover_origin, refit_top};
     use tauri::Url;
 
     fn page(url: &str, dev: bool) -> bool {
@@ -334,5 +373,20 @@ mod tests {
             popover_origin((1925.0, 790.0), SIZE, right),
             (1920.0, 310.0)
         );
+    }
+
+    #[test]
+    fn grows_down_from_a_menu_bar_and_up_from_a_taskbar() {
+        // (window top, old height, new height, monitor top, monitor height)
+        assert_eq!(refit_top(12.0, 200.0, 420.0, 0.0, 1080.0), 12.0);
+        assert_eq!(refit_top(820.0, 200.0, 420.0, 0.0, 1080.0), 600.0);
+        assert_eq!(refit_top(600.0, 420.0, 200.0, 0.0, 1080.0), 820.0);
+    }
+
+    #[test]
+    fn keeps_a_grown_window_on_screen() {
+        assert_eq!(refit_top(12.0, 200.0, 1200.0, 0.0, 1080.0), 0.0);
+        assert_eq!(refit_top(700.0, 100.0, 300.0, 0.0, 1080.0), 500.0);
+        assert_eq!(refit_top(400.0, 100.0, 800.0, 0.0, 1080.0), 280.0);
     }
 }
