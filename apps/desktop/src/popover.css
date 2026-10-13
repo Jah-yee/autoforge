@@ -1,17 +1,39 @@
 /* Linked from index.html, never injected: the CSP allows only same-origin stylesheets. */
+
+/* Big Shoulders Display, SIL Open Font License (public/fonts/OFL.txt). */
+@font-face {
+  font-family: "Big Shoulders";
+  src: url("/fonts/big-shoulders.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: block;
+}
+
+/*
+ * The forge: chalk and soot, plus the steel tempering colours as the only hues. Each status has
+ * one temper: straw queued, bronze running, purple awaiting you, blue published, cold steel
+ * failed. Nothing else gets a colour.
+ */
 :root {
   color-scheme: light;
-  --ground: #e9e9ec;
-  --panel: #fbfbfc;
-  --chip: #f0f0f3;
-  --ink: #18181b;
-  --muted: #66666d;
-  --faint: #b4b4bb;
-  --line: rgb(0 0 0 / 0.08);
-  --coral: #ef5350;
-  --coral-ink: #c62f2c;
-  --green: #22a447;
-  --radius: 18px;
+  --ground: #f3eee5;
+  --well: #e8e1d5;
+  --ink: #221e1a;
+  --muted: #675f55;
+  --faint: #a99f92;
+  --rule: #dcd3c5;
+  --straw: #dcb04e;
+  --bronze: #b06a2a;
+  --purple: #6b3d8c;
+  --blue: #2b579c;
+  --scale: #868d95;
+  --hot: #6b3d8c;
+  --on-hot: #fbf8f2;
+  --steel: #b3bac1;
+  --steel-hi: #e3e7ea;
+  --steel-dark: #6f7780;
+  --m-ink: #1d1916;
+  --chalk: #fbf8f2;
+  --display: "Big Shoulders", system-ui, sans-serif;
   font:
     13px/1.4 system-ui,
     -apple-system,
@@ -24,16 +46,19 @@
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
-    --ground: #000;
-    --panel: #1a1a1d;
-    --chip: #242428;
-    --ink: #f2f2f4;
-    --muted: #8e8e96;
-    --faint: #4a4a50;
-    --line: rgb(255 255 255 / 0.08);
-    --coral: #ff5c5c;
-    --coral-ink: #ff6b6b;
-    --green: #30c158;
+    --ground: #1e1a17;
+    --well: #2b2622;
+    --ink: #f1ebe1;
+    --muted: #ada294;
+    --faint: #6e655b;
+    --rule: #39322c;
+    --straw: #e8c46a;
+    --bronze: #d58b47;
+    --purple: #a27ac9;
+    --blue: #6e9be0;
+    --scale: #9aa1a8;
+    --hot: #5d3580;
+    --steel: #a7aeb5;
   }
 }
 
@@ -43,7 +68,6 @@
 
 html,
 body {
-  height: 100%;
   margin: 0;
   overflow: hidden;
   background: transparent; /* the window is transparent; #app draws the rounded panel */
@@ -51,7 +75,7 @@ body {
 }
 
 ::selection {
-  background: color-mix(in srgb, var(--coral) 35%, transparent);
+  background: color-mix(in srgb, var(--straw) 50%, transparent);
 }
 
 button,
@@ -62,7 +86,7 @@ summary {
 }
 
 :focus-visible {
-  outline: 2px solid var(--ink);
+  outline: 2px solid currentColor;
   outline-offset: 2px;
 }
 
@@ -80,60 +104,350 @@ ul {
   list-style: none;
 }
 
-/* Wide panel: top bar over a hero card and the runs card. */
+/* The panel. Its height follows the content; main.ts fits the window to it. */
 #app {
-  height: 100%;
-  display: grid;
-  grid-template-columns: 1.3fr 1fr;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 8px;
-  padding: 6px 10px 10px;
-  border-radius: 24px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--rule);
+  border-radius: 16px;
   background: var(--ground);
+  overflow: hidden;
 }
 
-.hero,
-.runs {
-  min-height: 0;
-  background: var(--panel);
-  border-radius: var(--radius);
+/* Temper colours, for anything carrying data-temper or data-status. */
+[data-temper="queued"],
+[data-status="queued"] {
+  --temper: var(--straw);
+}
+[data-temper="running"],
+[data-temper="publishing"],
+[data-status="running"],
+[data-status="publishing"] {
+  --temper: var(--bronze);
+}
+[data-temper="awaiting_approval"],
+[data-status="awaiting_approval"] {
+  --temper: var(--purple);
+}
+[data-temper="published"],
+[data-status="published"] {
+  --temper: var(--blue);
+}
+[data-temper="failed"],
+[data-temper="timed_out"],
+[data-status="failed"],
+[data-status="timed_out"] {
+  --temper: var(--scale);
 }
 
-.icon {
-  display: inline-grid;
+/* A piece of bar stock. Failed steel is hollow, so the state never rests on colour alone. */
+.bar {
+  display: inline-block;
   flex: none;
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 7px;
+  border-radius: 2px;
+  background: var(--temper, var(--faint));
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.16);
 }
 
-.icon svg {
-  width: 100%;
-  height: 100%;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.5;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+.bar:is([data-temper="failed"], [data-temper="timed_out"]) {
+  background: none;
+  box-shadow: inset 0 0 0 1.5px var(--scale);
 }
 
-/* Top bar */
-nav {
-  grid-column: 1 / -1;
+.bar:is([data-temper="running"], [data-temper="publishing"]) {
+  animation: heat 1.6s ease-in-out infinite alternate;
+}
+
+/* Header: the character stands on the bench line, the wordmark and its state beside it. */
+.hero {
+  display: grid;
+  grid-template-columns: 112px 1fr;
+  column-gap: 14px;
+  align-items: end;
+  padding: 14px 16px 0;
+  border-bottom: 3px solid var(--ink);
+}
+
+.hero > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding-bottom: 14px;
+}
+
+.title {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 6px;
+  gap: 10px;
+}
+
+h1 {
+  font:
+    800 30px/0.9 var(--display),
+    sans-serif;
+  letter-spacing: -0.01em;
+}
+
+/* The last ten runs, oldest first, as a rack of bar ends. */
+[data-activity] {
+  display: flex;
+  align-items: end;
+  gap: 3px;
+  margin-left: auto;
+}
+
+[data-activity] span {
+  width: 4px;
+  height: 14px;
+  border-radius: 1.5px;
+  background: var(--temper, var(--faint));
+}
+
+[data-activity] :is([data-status="failed"], [data-status="timed_out"]) {
+  height: 8px;
+  background: none;
+  box-shadow: inset 0 0 0 1.5px var(--scale);
+}
+
+[data-summary] {
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.mascot[data-mood="waiting"] ~ div [data-summary] {
+  color: var(--purple);
+}
+
+/* The counts read as a small temper chart. */
+dl {
+  display: grid;
+  gap: 3px;
+  margin-top: 6px;
+}
+
+[data-stat] {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+[data-stat] dt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+[data-stat] dd {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+/* Runs */
+.runs {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 380px;
+  padding: 10px 8px 8px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule) transparent;
+}
+
+.runs::-webkit-scrollbar {
+  width: 8px;
+}
+
+.runs::-webkit-scrollbar-thumb {
+  border: 2px solid var(--ground);
+  border-radius: 4px;
+  background: var(--rule);
+}
+
+h2 {
+  margin: 2px 10px 4px;
+  font:
+    700 12.5px/1.2 var(--display),
+    sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* What waits on you is the hot bar at the top, until you act. */
+section[aria-labelledby="awaiting"] {
+  padding: 10px 4px 4px;
+  border-radius: 12px;
+  background: var(--hot);
+  color: var(--on-hot);
+  --muted: color-mix(in srgb, var(--on-hot) 78%, var(--hot));
+  --faint: color-mix(in srgb, var(--on-hot) 50%, var(--hot));
+  --well: color-mix(in srgb, var(--on-hot) 12%, var(--hot));
+}
+
+section[aria-labelledby="awaiting"] .bar {
+  background: var(--on-hot);
+}
+
+[data-row] {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 8px;
+  row-gap: 1px;
+  width: 100%;
+  padding: 7px 10px 7px 38px;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  text-align: left;
+  font-size: 12px;
+}
+
+[data-row]:not([aria-disabled]):hover {
+  background: var(--well);
+}
+
+[data-row][aria-disabled] {
+  opacity: 0.7;
+}
+
+[data-row] > .bar {
+  position: absolute;
+  top: 12px;
+  left: 10px;
+}
+
+/* Line one: identifier and time. Line two: repo, status, PR; then the approval hint. */
+[data-row]::after {
+  content: "";
+  order: 3;
+  flex-basis: 100%;
+}
+
+[data-part="identifier"] {
+  order: 1;
+  font:
+    700 16px/1.15 var(--display),
+    sans-serif;
+  letter-spacing: 0.01em;
+}
+
+[data-part="time"] {
+  order: 2;
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+[data-part="repo"] {
+  order: 4;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+  color: var(--muted);
+}
+
+[data-part="status"] {
+  order: 5;
+  color: var(--muted);
+}
+
+[data-part="pr"] {
+  order: 6;
+  color: var(--muted);
+}
+
+:is([data-part="status"], [data-part="pr"])::before {
+  content: "·" / "";
+  margin-right: 8px;
+  color: var(--faint);
+}
+
+[data-part="hint"] {
+  order: 7;
+  flex-basis: 100%;
+  margin-top: 2px;
+  font-weight: 650;
+}
+
+.sep {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Empty, not running and unreachable states. */
+.runs > p {
+  margin: 0 8px;
+  color: var(--muted);
+}
+
+.runs > p:first-child {
+  color: var(--ink);
+  font-weight: 650;
+}
+
+.runs > p:has(> button) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+code {
+  padding: 2px 6px;
+  white-space: nowrap;
+  border-radius: 5px;
+  background: var(--well);
+  font:
+    11.5px ui-monospace,
+    "SF Mono",
+    Menlo,
+    Consolas,
+    monospace;
+}
+
+.runs > p > button {
+  padding: 3px 10px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: none;
+  font-size: 11.5px;
+}
+
+.runs > p > button:hover {
+  background: var(--well);
+}
+
+/* Footer: connection and settings. */
+footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px 4px 16px;
+  border-top: 1px solid var(--rule);
+  font-size: 11.5px;
+  color: var(--muted);
 }
 
 [data-pill] {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 11px;
-  border-radius: 999px;
-  background: var(--panel);
-  color: var(--muted);
-  font-size: 12px;
 }
 
 [data-pill]::before {
@@ -145,11 +459,26 @@ nav {
 }
 
 [data-pill][data-tone="ok"]::before {
-  background: var(--green);
+  background: var(--blue);
 }
 
 [data-pill][data-tone="bad"]::before {
-  background: var(--coral);
+  background: none;
+  box-shadow: inset 0 0 0 1.5px var(--scale);
+}
+
+.icon {
+  display: grid;
+  place-items: center;
+}
+
+.icon svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
 }
 
 .menu {
@@ -162,7 +491,6 @@ nav {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  color: var(--muted);
   list-style: none;
 }
 
@@ -172,23 +500,25 @@ nav {
 
 .menu summary:hover,
 .menu[open] summary {
-  background: var(--panel);
+  background: var(--well);
   color: var(--ink);
 }
 
 .menu > div {
   position: absolute;
-  top: 34px;
   right: 0;
+  bottom: 32px;
   z-index: 10;
   display: grid;
   gap: 2px;
   min-width: 180px;
   padding: 6px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--rule);
   border-radius: 12px;
-  background: var(--chip);
-  box-shadow: 0 10px 28px rgb(0 0 0 / 0.28);
+  background: var(--ground);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.2);
+  font-size: 12.5px;
+  color: var(--ink);
 }
 
 .menu label,
@@ -205,645 +535,383 @@ nav {
 
 .menu label:hover,
 .menu button:hover {
-  background: var(--line);
+  background: var(--well);
 }
 
 .menu input {
   margin: 0;
-  accent-color: var(--green);
-}
-
-/* Hero card */
-.hero {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 10px 18px 10px 8px;
-}
-
-.hero .mascot {
-  width: 100px;
-  height: 100px;
-}
-
-.hero > div {
-  flex: 1;
-  min-width: 0;
-}
-
-.title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.title .dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--faint);
-}
-
-.title .dot:is([data-mood="waiting"], [data-mood="sad"]) {
-  background: var(--coral);
-}
-
-.title .dot:is([data-mood="working"], [data-mood="happy"]) {
-  background: var(--green);
-}
-
-.title .dot[data-mood="idle"] {
-  background: var(--muted);
-}
-
-h1 {
-  font-size: 15px;
-  font-weight: 650;
-  letter-spacing: -0.01em;
-}
-
-[data-activity] {
-  display: flex;
-  gap: 3px;
-  margin-left: auto;
-}
-
-[data-activity] span {
-  width: 8px;
-  height: 8px;
-  border-radius: 2px;
-  background: var(--faint);
-}
-
-[data-activity] [data-status="published"] {
-  background: var(--green);
-}
-
-[data-activity] :is([data-status="failed"], [data-status="timed_out"]) {
-  background: var(--coral);
-}
-
-[data-summary] {
-  margin: 2px 0 10px;
-  color: var(--muted);
-  font-size: 12.5px;
-}
-
-.mascot[data-mood="waiting"] ~ div [data-summary] {
-  color: var(--coral-ink);
-}
-
-dl {
-  display: grid;
-  gap: 7px;
-}
-
-[data-stat] {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-[data-stat] dt {
-  white-space: nowrap;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--muted);
-}
-
-[data-stat] dd {
-  font-weight: 650;
-}
-
-[data-stat="awaiting"] .icon {
-  color: var(--coral);
-}
-
-[data-stat="running"] .icon {
-  color: var(--green);
-}
-
-[data-stat="running"] .icon path {
-  fill: currentColor;
-}
-
-/* Runs card */
-.runs {
-  overflow-y: auto;
-  padding: 10px 8px 8px 10px;
-  scrollbar-width: thin;
-  scrollbar-color: var(--faint) transparent;
-}
-
-.runs section + section {
-  margin-top: 10px;
-}
-
-h2 {
-  margin: 0 0 5px 4px;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-
-.runs ul {
-  display: grid;
-  gap: 4px;
-}
-
-[data-row] {
-  position: relative;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 1px 6px;
-  width: 100%;
-  padding: 7px 10px 7px 24px;
-  border: 0;
-  border-radius: 11px;
-  background: var(--chip);
-  text-align: left;
-  font-size: 12.5px;
-}
-
-[data-row]:not([aria-disabled]):hover {
-  background: color-mix(in srgb, var(--chip), var(--ink) 6%);
-}
-
-[data-row][aria-disabled] {
-  opacity: 0.7;
-}
-
-/* Status mark: shape and colour, never colour alone. */
-[data-row]::before {
-  content: "";
-  position: absolute;
-  top: 12px;
-  left: 10px;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--faint);
-}
-
-[data-row]:is(
-    [data-status="awaiting_approval"],
-    [data-status="failed"],
-    [data-status="timed_out"]
-  )::before {
-  background: var(--coral);
-}
-
-[data-row]:is(
-    [data-status="running"],
-    [data-status="publishing"],
-    [data-status="published"]
-  )::before {
-  background: var(--green);
-}
-
-[data-row][data-status="queued"]::before {
-  background: none;
-  box-shadow: inset 0 0 0 1.5px var(--muted);
-}
-
-[data-row][data-status="awaiting_approval"]::before {
-  --pulse: color-mix(in srgb, var(--coral) 50%, transparent);
-  animation: pulse 1.8s ease-out infinite;
-}
-
-[data-row][data-status="running"]::before {
-  --pulse: color-mix(in srgb, var(--green) 50%, transparent);
-  animation: pulse 1.8s ease-out infinite;
-}
-
-/* Line one: identifier, status, time. Line two: repo and PR or hint. */
-[data-row]::after {
-  content: "";
-  order: 4;
-  flex-basis: 100%;
-}
-
-[data-part="identifier"] {
-  order: 1;
-  font-weight: 650;
-}
-
-[data-part="status"] {
-  order: 2;
-  flex: 1 1 0;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--muted);
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-[data-part="time"] {
-  order: 3;
-  margin-left: auto;
-  color: var(--muted);
-  font-size: 11.5px;
-}
-
-[data-part="repo"] {
-  order: 5;
-}
-
-[data-part="pr"],
-[data-part="hint"] {
-  order: 6;
-}
-
-:is([data-part="repo"], [data-part="pr"], [data-part="hint"]) {
-  color: var(--muted);
-  font-size: 11.5px;
-}
-
-[data-part="hint"] {
-  color: var(--coral-ink);
-}
-
-.sep {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
-/* Empty, not running and unreachable states. */
-.runs > p {
-  margin: 2px 4px 8px;
-  color: var(--muted);
-}
-
-.runs > p:first-child {
-  color: var(--ink);
-  font-weight: 600;
-}
-
-.runs > p:has(> button) {
-  margin-block: 0 4px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-code {
-  padding: 3px 6px;
-  white-space: nowrap;
-  border-radius: 6px;
-  background: var(--chip);
-  font:
-    11.5px ui-monospace,
-    "SF Mono",
-    Menlo,
-    Consolas,
-    monospace;
-}
-
-.runs > p > button {
-  padding: 3px 10px;
-  border: 0;
-  border-radius: 999px;
-  background: var(--chip);
-  font-size: 11.5px;
-}
-
-.runs > p > button:hover {
-  background: color-mix(in srgb, var(--chip), var(--ink) 8%);
-}
-
-@keyframes pulse {
-  from {
-    box-shadow: 0 0 0 0 var(--pulse);
-  }
-  to {
-    box-shadow: 0 0 0 6px transparent;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  [data-row]::before {
-    animation: none !important;
-  }
+  accent-color: var(--blue);
 }
 
 /*
- * The character (CHARACTER in view.ts): a rubber-hose cube with a hammer. Parts with class "v"
- * are hidden until a mood shows them; the face and pose carry the state, so every
- * mood still reads with motion turned off.
+ * The character (CHARACTER in view.ts): a soft ember whose body takes the mood's temper colour.
+ * Parts with class "v" stay hidden until a mood shows them. Face, colour and pose carry the
+ * state, so every mood still reads with motion turned off.
  */
 .mascot {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 76px;
-  height: 76px;
-}
-
-/* On a dark panel the ink outline would vanish: cut it out like a sticker. */
-@media (prefers-color-scheme: dark) {
-  .mascot svg {
-    filter: drop-shadow(1.2px 0 0 #f2f2f4) drop-shadow(-1.2px 0 0 #f2f2f4)
-      drop-shadow(0 1.2px 0 #f2f2f4) drop-shadow(0 -1.2px 0 #f2f2f4);
-  }
+  width: 112px;
+  margin-bottom: -3px; /* the shadow sits on the bench line */
+  --body: var(--straw);
 }
 
 .mascot svg {
-  width: 90%;
-  height: 90%;
+  display: block;
+  width: 100%;
   overflow: visible;
-  transform-origin: 50% 90%;
 }
 
-.mascot .ink {
-  stroke: #141416;
+.mascot .body {
+  fill: var(--body);
+}
+
+.mascot .tone {
+  fill: color-mix(in srgb, var(--body), #000 14%);
+}
+
+.mascot .shade {
+  fill: #000;
+  opacity: 0.1;
+}
+
+.mascot .sheen {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 4;
+  stroke-linecap: round;
+  opacity: 0.4;
+}
+
+.mascot .ground {
+  fill: #000;
+  opacity: 0.14;
+}
+
+.mascot .cheeks {
+  fill: #ff8a8a;
+  opacity: 0.45;
+}
+
+.mascot .socket {
+  fill: none;
+}
+
+.mascot .dark {
+  fill: var(--m-ink);
+}
+
+.mascot .glint {
+  fill: #fff;
+}
+
+.mascot .line,
+.mascot .lens-glint {
+  fill: none;
+  stroke: var(--m-ink);
+  stroke-width: 2.6;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
-.mascot .ink:not([stroke-width]) {
+.mascot .lens-glint {
+  stroke: #fff;
+  stroke-width: 1.8;
+}
+
+.mascot .tongue {
+  fill: #ff8a8a;
+}
+
+.mascot .strap {
+  fill: none;
+  stroke: var(--m-ink);
+  stroke-width: 4.5;
+  stroke-linecap: round;
+}
+
+.mascot .lens {
+  fill: #cfe0ea;
+  stroke: var(--m-ink);
   stroke-width: 2.6;
+}
+
+.mascot .sparks path {
+  fill: none;
+  stroke: var(--straw);
+  stroke-width: 2.6;
+  stroke-linecap: round;
+}
+
+.mascot .star {
+  fill: var(--straw);
+}
+
+.mascot .sweat {
+  fill: #9cc0ee;
+}
+
+/* Props drawn in ink need a light stroke on the dark panel. */
+@media (prefers-color-scheme: dark) {
+  .mascot :is(.alert, .zz, .question) {
+    --m-ink: var(--ink);
+  }
 }
 
 .mascot .v {
   display: none;
 }
 
-/* Limbs turn around their shoulder or hip. */
-.mascot :is(.arm-l, .arm-r, .leg) {
+.mascot :is(.figure, .goggles) {
   transform-box: view-box;
-  transition: transform 400ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.mascot .arm-l {
-  transform-origin: 16px 28px;
+.mascot .figure {
+  transform-origin: 50px 86px;
 }
 
-.mascot .arm-r {
-  transform-origin: 62px 24px;
+.mascot :is(.arm-l, .arm-r) {
+  transform-box: fill-box;
+  transform-origin: 50% 80%;
 }
 
-.mascot .leg:first-child {
-  transform-origin: 34px 46px;
-}
-
-.mascot .leg:nth-child(2) {
-  transform-origin: 46px 46px;
-}
-
-.mascot :is(.eye, .eyes, .spark, .zz path, .sweat, .question) {
+.mascot .eye {
   transform-box: fill-box;
   transform-origin: center;
 }
 
-/* What each mood shows. */
-[data-mood="waiting"] :is(.eyes, .m-o),
-[data-mood="working"] :is(.eyes, .m-grin),
-[data-mood="happy"] :is(.eyes-happy, .m-grin, .sparkles),
-[data-mood="idle"] :is(.eyes, .m-grin),
-[data-mood="sad"] :is(.eyes, .lids, .m-frown, .sweat),
-[data-mood="asleep"] :is(.eyes-closed, .m-small, .zz),
-[data-mood="lost"] :is(.eyes, .m-wavy, .question) {
+.mascot .goggles {
+  transition: translate 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Idle, and the base every mood starts from: open eyes, a small smile. */
+.mascot :is(.eyes, .m-smile) {
   display: inline;
 }
 
-/* Pupils follow the mood: up at you when waiting, at the hammer when working. */
-.mascot .pupil {
-  transition: translate 300ms cubic-bezier(0.16, 1, 0.3, 1);
+[data-mood="idle"] .eye {
+  animation: blink 5s infinite;
 }
 
-[data-mood="waiting"] .pupil {
-  translate: -2px -3px;
-}
-
-[data-mood="working"] .pupil {
-  translate: 0.5px -3.5px;
-}
-
-/* The hammer rests at its side unless the mood says otherwise. */
-.mascot .arm-r {
-  transform: rotate(115deg);
-}
-
-/* idle: a soft rubber-hose bob and a blink. */
-[data-mood="idle"] svg {
-  animation: bob 1.8s ease-in-out infinite alternate;
-}
-
-[data-mood="idle"] .eye,
-[data-mood="waiting"] .eye {
-  animation: blink 4.2s infinite;
-}
-
-/* waiting: waves at you. */
-[data-mood="waiting"] .arm-l {
-  transform: rotate(125deg);
-  animation: wave 0.45s ease-in-out infinite alternate;
-}
-
-/* working: walks and swings the hammer. */
-[data-mood="working"] svg {
-  animation: bob 0.35s ease-in-out infinite alternate;
-}
-
-[data-mood="working"] .arm-r {
-  transform: rotate(-15deg);
-  animation: swing 0.7s cubic-bezier(0.5, 0, 0.75, 0) infinite alternate;
-}
-
-[data-mood="working"] .leg:first-child {
-  animation: walk 0.35s ease-in-out infinite alternate;
-}
-
-[data-mood="working"] .leg:nth-child(2) {
-  animation: walk 0.35s ease-in-out infinite alternate-reverse;
-}
-
-/* happy: jumps with the hammer up. */
-[data-mood="happy"] svg {
-  animation: jump 1.2s cubic-bezier(0.33, 0, 0.2, 1) infinite;
-}
-
-[data-mood="happy"] .arm-r {
-  transform: rotate(-12deg);
-}
-
-[data-mood="happy"] .arm-l {
-  transform: rotate(140deg);
-}
-
-[data-mood="happy"] .spark {
-  animation: twinkle 0.9s ease-in-out infinite alternate;
-}
-
-[data-mood="happy"] .spark:last-child {
-  animation-delay: -0.45s;
-}
-
-/* sad: slumped, hammer dragging, a bead of sweat. */
-[data-mood="sad"] svg {
-  transform: translateY(2px) scaleY(0.97);
-}
-
-[data-mood="sad"] .arm-r {
-  transform: rotate(135deg);
-}
-
-[data-mood="sad"] .sweat {
-  animation: drip 2.4s ease-in infinite;
-}
-
-/* asleep: dozing, z's drifting up. */
-[data-mood="asleep"] svg {
+[data-mood="idle"] .figure {
   animation: breathe 3.6s ease-in-out infinite;
 }
 
-[data-mood="asleep"] .arm-r {
-  transform: rotate(130deg);
+/* Waiting on you: purple, eyebrows up, waving. */
+.mascot[data-mood="waiting"] {
+  --body: var(--purple);
+}
+
+[data-mood="waiting"] :is(.brows-up, .m-o, .alert) {
+  display: inline;
+}
+
+[data-mood="waiting"] .m-smile {
+  display: none;
+}
+
+[data-mood="waiting"] .arm-l {
+  translate: -4px -17px;
+  rotate: 25deg;
+  animation: wave 0.9s ease-in-out infinite alternate;
+}
+
+[data-mood="waiting"] .alert {
+  animation: nudge 1.8s ease-in-out infinite;
+}
+
+/* Working: bronze-hot, goggles down, sparks. */
+.mascot[data-mood="working"] {
+  --body: var(--bronze);
+}
+
+[data-mood="working"] :is(.m-small, .sparks) {
+  display: inline;
+}
+
+[data-mood="working"] :is(.eyes, .m-smile) {
+  display: none;
+}
+
+[data-mood="working"] .goggles {
+  translate: 0 22px;
+}
+
+[data-mood="working"] .figure {
+  animation: squash 0.8s ease-in-out infinite;
+}
+
+[data-mood="working"] .sparks {
+  animation: flash 0.8s linear infinite;
+}
+
+/* Happy: tempered blue, hopping. */
+.mascot[data-mood="happy"] {
+  --body: var(--blue);
+}
+
+[data-mood="happy"] :is(.eyes-happy, .m-grin, .sparkles) {
+  display: inline;
+}
+
+[data-mood="happy"] :is(.eyes, .m-smile) {
+  display: none;
+}
+
+[data-mood="happy"] .arm-l {
+  translate: -4px -17px;
+  rotate: 25deg;
+}
+
+[data-mood="happy"] .arm-r {
+  translate: 4px -17px;
+  rotate: -25deg;
+}
+
+[data-mood="happy"] .figure {
+  animation: hop 1.2s cubic-bezier(0.3, 0, 0.3, 1) infinite;
+}
+
+/* Sad: gone cold and grey, slumped. */
+.mascot[data-mood="sad"] {
+  --body: var(--scale);
+}
+
+[data-mood="sad"] :is(.brows-sad, .m-frown, .sweat) {
+  display: inline;
+}
+
+[data-mood="sad"] .m-smile {
+  display: none;
+}
+
+[data-mood="sad"] .pupil {
+  translate: 0 1.5px;
+}
+
+[data-mood="sad"] .figure {
+  scale: 1.03 0.96;
+}
+
+/* Asleep: the daemon isn't running. */
+.mascot[data-mood="asleep"] {
+  --body: color-mix(in srgb, var(--scale), var(--ground) 25%);
+}
+
+[data-mood="asleep"] :is(.eyes-closed, .m-small, .zz) {
+  display: inline;
+}
+
+[data-mood="asleep"] :is(.eyes, .m-smile) {
+  display: none;
+}
+
+[data-mood="asleep"] .figure {
+  animation: breathe 4.5s ease-in-out infinite;
 }
 
 [data-mood="asleep"] .zz path {
-  animation: drift 3s ease-out infinite;
+  animation: drift 2.4s ease-in-out infinite;
 }
 
 [data-mood="asleep"] .zz path:last-child {
-  animation-delay: -1.5s;
+  animation-delay: 0.6s;
 }
 
-/* lost: scratches its head, eyes darting. */
-[data-mood="lost"] .arm-l {
-  transform: rotate(153deg);
-  animation: scratch 0.5s ease-in-out infinite alternate;
+/* Lost: can't reach the daemon, looking around. */
+.mascot[data-mood="lost"] {
+  --body: var(--scale);
 }
 
-[data-mood="lost"] .eyes {
+[data-mood="lost"] :is(.m-wavy, .question, .brows-up) {
+  display: inline;
+}
+
+[data-mood="lost"] .m-smile {
+  display: none;
+}
+
+[data-mood="lost"] .pupil {
   animation: look 3s ease-in-out infinite;
 }
 
-[data-mood="lost"] .question {
-  animation: bob 1.2s ease-in-out infinite alternate;
+@keyframes heat {
+  to {
+    background: color-mix(in srgb, var(--bronze), var(--straw) 60%);
+  }
 }
 
 @keyframes blink {
   0%,
-  93%,
+  94%,
   100% {
-    transform: scaleY(1);
+    scale: 1 1;
   }
-  96% {
-    transform: scaleY(0.1);
-  }
-}
-
-@keyframes bob {
-  to {
-    transform: translateY(-2px);
+  97% {
+    scale: 1 0.1;
   }
 }
 
 @keyframes breathe {
   50% {
-    transform: scale(1.03, 0.97);
+    scale: 1.02 0.97;
+  }
+}
+
+@keyframes squash {
+  0%,
+  100% {
+    scale: 1.05 0.94;
+  }
+  50% {
+    scale: 0.97 1.04;
+    translate: 0 -3px;
+  }
+}
+
+@keyframes hop {
+  0%,
+  100% {
+    translate: 0 0;
+    scale: 1.04 0.96;
+  }
+  40% {
+    translate: 0 -7px;
+    scale: 0.97 1.03;
+  }
+  70% {
+    translate: 0 0;
   }
 }
 
 @keyframes wave {
-  from {
-    transform: rotate(110deg);
-  }
   to {
-    transform: rotate(145deg);
+    rotate: 55deg;
   }
 }
 
-@keyframes swing {
-  from {
-    transform: rotate(-20deg);
-  }
-  to {
-    transform: rotate(60deg);
+@keyframes nudge {
+  50% {
+    translate: 0 -2px;
   }
 }
 
-@keyframes walk {
-  from {
-    transform: rotate(-10deg);
-  }
-  to {
-    transform: rotate(10deg);
-  }
-}
-
-@keyframes jump {
+@keyframes flash {
   0%,
-  45%,
-  100% {
-    transform: translateY(0) scale(1, 1);
-  }
-  10% {
-    transform: translateY(0) scale(1.06, 0.92);
-  }
-  25% {
-    transform: translateY(-8px) scale(0.96, 1.05);
-  }
-  38% {
-    transform: translateY(0) scale(1.04, 0.96);
-  }
-}
-
-@keyframes twinkle {
-  from {
-    opacity: 0.3;
-    scale: 0.6;
-  }
-  to {
-    opacity: 1;
-    scale: 1.15;
-  }
-}
-
-@keyframes drip {
-  0% {
-    translate: 0 0;
+  35% {
     opacity: 0;
   }
-  20% {
+  50% {
     opacity: 1;
   }
+  75%,
   100% {
-    translate: 0 9px;
     opacity: 0;
   }
 }
 
 @keyframes drift {
-  0% {
-    translate: -2px 4px;
-    opacity: 0;
-  }
-  30% {
-    opacity: 1;
-  }
-  100% {
-    translate: 4px -8px;
-    opacity: 0;
-  }
-}
-
-@keyframes scratch {
-  from {
-    transform: rotate(147deg);
-  }
-  to {
-    transform: rotate(159deg);
+  50% {
+    translate: 1px -2px;
+    opacity: 0.6;
   }
 }
 
@@ -852,16 +920,14 @@ code {
   100% {
     translate: -2px 0;
   }
-  45%,
-  55% {
+  50% {
     translate: 2px 0;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .mascot,
+  *,
   .mascot * {
     animation: none !important;
-    transition: none !important;
   }
 }

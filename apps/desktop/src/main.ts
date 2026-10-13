@@ -31,6 +31,12 @@ const act: Actions = {
 };
 
 installKeys(root, act);
+// The window is as tall as the panel: short when idle, taller with runs (Rust caps it).
+if ("ResizeObserver" in window)
+  // not in the test DOM
+  new ResizeObserver(() =>
+    invoke("fit_popover", { height: root.offsetHeight }).catch(quiet),
+  ).observe(root);
 installGaze(root);
 draw();
 let gotEvent = false;

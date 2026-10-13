@@ -15,8 +15,8 @@
       {
         "label": "popover",
         "title": "autoforge",
-        "width": 640,
-        "height": 210,
+        "width": 400,
+        "height": 240,
         "visible": false,
         "decorations": false,
         "transparent": true,

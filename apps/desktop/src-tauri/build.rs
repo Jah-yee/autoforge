@@ -5,6 +5,7 @@ fn main() {
         "current_state",
         "open_url",
         "hide_popover",
+        "fit_popover",
         "autostart_enabled",
         "set_autostart",
         "quit",
