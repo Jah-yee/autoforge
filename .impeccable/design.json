@@ -1,0 +1,677 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-13T08:22:12+00:00",
+  "title": "Design System: autoforge",
+  "extensions": {
+    "colorMeta": {
+      "straw": {
+        "role": "primary",
+        "displayName": "Straw",
+        "canonical": "oklch(77.9% 0.126 85)",
+        "tonalRamp": [
+          "#110a00",
+          "#312301",
+          "#543e04",
+          "#7b5c0a",
+          "#a37b13",
+          "#c99e3a",
+          "#efc261",
+          "#feedc9"
+        ]
+      },
+      "straw-dark": {
+        "role": "primary",
+        "displayName": "Straw (dark)",
+        "canonical": "oklch(83.3% 0.117 88)",
+        "tonalRamp": [
+          "#110a00",
+          "#302300",
+          "#533f00",
+          "#795d02",
+          "#9f7d19",
+          "#c4a045",
+          "#e9c56b",
+          "#feedc4"
+        ]
+      },
+      "bronze": {
+        "role": "primary",
+        "displayName": "Bronze",
+        "canonical": "oklch(59.0% 0.118 59)",
+        "tonalRamp": [
+          "#160700",
+          "#3a1c01",
+          "#633504",
+          "#8f4f0a",
+          "#b56f30",
+          "#db9254",
+          "#fdb881",
+          "#feeadb"
+        ]
+      },
+      "bronze-dark": {
+        "role": "primary",
+        "displayName": "Bronze (dark)",
+        "canonical": "oklch(70.0% 0.123 61)",
+        "tonalRamp": [
+          "#160700",
+          "#391d01",
+          "#623503",
+          "#8d5008",
+          "#b66f27",
+          "#dc924e",
+          "#feb87c",
+          "#ffeada"
+        ]
+      },
+      "purple": {
+        "role": "primary",
+        "displayName": "Temper Purple",
+        "canonical": "oklch(45.2% 0.131 309)",
+        "tonalRamp": [
+          "#140022",
+          "#370253",
+          "#562875",
+          "#774999",
+          "#996abd",
+          "#bd8de3",
+          "#ddb6fe",
+          "#f5e9ff"
+        ]
+      },
+      "purple-dark": {
+        "role": "primary",
+        "displayName": "Temper Purple (dark)",
+        "canonical": "oklch(64.9% 0.122 307)",
+        "tonalRamp": [
+          "#140024",
+          "#350852",
+          "#532c74",
+          "#734c97",
+          "#956dbb",
+          "#b990e1",
+          "#dbb8ff",
+          "#f3eafe"
+        ]
+      },
+      "blue": {
+        "role": "primary",
+        "displayName": "Tempered Blue",
+        "canonical": "oklch(46.3% 0.122 259)",
+        "tonalRamp": [
+          "#000924",
+          "#012154",
+          "#133f82",
+          "#3360a6",
+          "#5482cb",
+          "#76a6f1",
+          "#aacbff",
+          "#e5efff"
+        ]
+      },
+      "blue-dark": {
+        "role": "primary",
+        "displayName": "Tempered Blue (dark)",
+        "canonical": "oklch(68.6% 0.114 259)",
+        "tonalRamp": [
+          "#000923",
+          "#012253",
+          "#17407d",
+          "#3761a1",
+          "#5783c6",
+          "#79a6ec",
+          "#aacbfd",
+          "#e5efff"
+        ]
+      },
+      "scale": {
+        "role": "primary",
+        "displayName": "Cold Steel",
+        "canonical": "oklch(64.0% 0.015 252)",
+        "tonalRamp": [
+          "#070c11",
+          "#20262c",
+          "#3d434a",
+          "#5b6269",
+          "#7c838b",
+          "#9fa6ae",
+          "#c3cad3",
+          "#e8eff8"
+        ]
+      },
+      "scale-dark": {
+        "role": "primary",
+        "displayName": "Cold Steel (dark)",
+        "canonical": "oklch(70.6% 0.013 248)",
+        "tonalRamp": [
+          "#070c10",
+          "#20262b",
+          "#3d4349",
+          "#5c6268",
+          "#7c838a",
+          "#9fa6ad",
+          "#c3cad1",
+          "#e8eff7"
+        ]
+      },
+      "hot": {
+        "role": "secondary",
+        "displayName": "Hot Bar Purple",
+        "canonical": "oklch(45.2% 0.131 309)",
+        "tonalRamp": [
+          "#140022",
+          "#370253",
+          "#562875",
+          "#774999",
+          "#996abd",
+          "#bd8de3",
+          "#ddb6fe",
+          "#f5e9ff"
+        ]
+      },
+      "hot-dark": {
+        "role": "secondary",
+        "displayName": "Hot Bar Purple (dark)",
+        "canonical": "oklch(41.5% 0.125 306)",
+        "tonalRamp": [
+          "#140024",
+          "#350753",
+          "#532b75",
+          "#734b98",
+          "#956dbd",
+          "#b990e3",
+          "#dab8fe",
+          "#f3eaff"
+        ]
+      },
+      "on-hot": {
+        "role": "secondary",
+        "displayName": "Hot Chalk",
+        "canonical": "oklch(98.0% 0.009 85)",
+        "tonalRamp": [
+          "#0d0b07",
+          "#272520",
+          "#44423d",
+          "#63615c",
+          "#85827d",
+          "#a7a59f",
+          "#ccc9c3",
+          "#f1eee8"
+        ]
+      },
+      "ground": {
+        "role": "neutral",
+        "displayName": "Chalk Ground",
+        "canonical": "oklch(95.1% 0.013 82)",
+        "tonalRamp": [
+          "#0e0b06",
+          "#28251e",
+          "#45413a",
+          "#656159",
+          "#86827a",
+          "#a9a49c",
+          "#cdc8c0",
+          "#f3eee5"
+        ]
+      },
+      "ground-dark": {
+        "role": "neutral",
+        "displayName": "Soot Ground",
+        "canonical": "oklch(22.1% 0.009 59)",
+        "tonalRamp": [
+          "#0e0a08",
+          "#282421",
+          "#46413e",
+          "#65605c",
+          "#86817d",
+          "#a9a4a0",
+          "#cdc8c4",
+          "#f3ede9"
+        ]
+      },
+      "well": {
+        "role": "neutral",
+        "displayName": "Well",
+        "canonical": "oklch(91.2% 0.018 81)",
+        "tonalRamp": [
+          "#0f0a04",
+          "#29241b",
+          "#474137",
+          "#666056",
+          "#888177",
+          "#aba499",
+          "#cfc8bc",
+          "#f5eee1"
+        ]
+      },
+      "well-dark": {
+        "role": "neutral",
+        "displayName": "Well (dark)",
+        "canonical": "oklch(27.3% 0.010 61)",
+        "tonalRamp": [
+          "#0e0a07",
+          "#292420",
+          "#46413c",
+          "#66605b",
+          "#87817c",
+          "#aaa49f",
+          "#cec8c2",
+          "#f4ede8"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "oklch(23.8% 0.010 67)",
+        "tonalRamp": [
+          "#0e0a07",
+          "#282420",
+          "#46413d",
+          "#65605b",
+          "#86817c",
+          "#a9a49f",
+          "#cec8c3",
+          "#f3ede8"
+        ]
+      },
+      "ink-dark": {
+        "role": "neutral",
+        "displayName": "Ink (dark)",
+        "canonical": "oklch(94.2% 0.015 81)",
+        "tonalRamp": [
+          "#0e0b05",
+          "#29241d",
+          "#464139",
+          "#666058",
+          "#878279",
+          "#aaa49b",
+          "#cec8bf",
+          "#f4eee4"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Muted",
+        "canonical": "oklch(49.0% 0.019 73)",
+        "tonalRamp": [
+          "#100a04",
+          "#2b241b",
+          "#484137",
+          "#686056",
+          "#898176",
+          "#aca499",
+          "#d1c8bc",
+          "#f6ede1"
+        ]
+      },
+      "muted-dark": {
+        "role": "neutral",
+        "displayName": "Muted (dark)",
+        "canonical": "oklch(71.8% 0.024 74)",
+        "tonalRamp": [
+          "#110a02",
+          "#2c2318",
+          "#4a4034",
+          "#695f53",
+          "#8b8173",
+          "#aea395",
+          "#d3c7b9",
+          "#f8edde"
+        ]
+      },
+      "faint": {
+        "role": "neutral",
+        "displayName": "Faint",
+        "canonical": "oklch(70.7% 0.022 75)",
+        "tonalRamp": [
+          "#110a03",
+          "#2b2419",
+          "#494035",
+          "#696054",
+          "#8a8174",
+          "#ada396",
+          "#d2c7ba",
+          "#f7eddf"
+        ]
+      },
+      "faint-dark": {
+        "role": "neutral",
+        "displayName": "Faint (dark)",
+        "canonical": "oklch(51.2% 0.019 70)",
+        "tonalRamp": [
+          "#100a04",
+          "#2b241b",
+          "#494037",
+          "#686056",
+          "#8a8176",
+          "#ada398",
+          "#d1c7bc",
+          "#f7ede1"
+        ]
+      },
+      "rule": {
+        "role": "neutral",
+        "displayName": "Rule",
+        "canonical": "oklch(87.0% 0.021 79)",
+        "tonalRamp": [
+          "#100a03",
+          "#2b2419",
+          "#484135",
+          "#686054",
+          "#898174",
+          "#aca496",
+          "#d1c8ba",
+          "#f6eddf"
+        ]
+      },
+      "rule-dark": {
+        "role": "neutral",
+        "displayName": "Rule (dark)",
+        "canonical": "oklch(32.3% 0.014 63)",
+        "tonalRamp": [
+          "#100a06",
+          "#2a241e",
+          "#48403a",
+          "#676059",
+          "#89817a",
+          "#aca39c",
+          "#d0c7c0",
+          "#f6ede5"
+        ]
+      },
+      "m-ink": {
+        "role": "character",
+        "displayName": "Mascot Ink",
+        "canonical": "oklch(21.7% 0.009 59)",
+        "tonalRamp": [
+          "#0e0a08",
+          "#282421",
+          "#46413e",
+          "#65605c",
+          "#86817d",
+          "#a9a4a0",
+          "#cec8c4",
+          "#f3ede9"
+        ]
+      },
+      "mascot-blush": {
+        "role": "character",
+        "displayName": "Blush",
+        "canonical": "oklch(76.2% 0.142 21)",
+        "tonalRamp": [
+          "#1e0002",
+          "#4c010d",
+          "#7c0d1e",
+          "#a2373d",
+          "#c95a5c",
+          "#f17d7e",
+          "#feb2b0",
+          "#ffe8e7"
+        ]
+      },
+      "mascot-lens": {
+        "role": "character",
+        "displayName": "Lens",
+        "canonical": "oklch(89.7% 0.023 233)",
+        "tonalRamp": [
+          "#030d13",
+          "#1a272e",
+          "#36444c",
+          "#55646c",
+          "#75858e",
+          "#98a8b1",
+          "#bbccd6",
+          "#e0f2fc"
+        ]
+      },
+      "mascot-sweat": {
+        "role": "character",
+        "displayName": "Sweat",
+        "canonical": "oklch(79.8% 0.076 255)",
+        "tonalRamp": [
+          "#000b20",
+          "#052549",
+          "#24436a",
+          "#43638c",
+          "#6385b0",
+          "#85a8d5",
+          "#a8ccfb",
+          "#e4f0ff"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "The lowercase wordmark only."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "The issue identifier, headline of every run row."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Uppercase section headings with counts."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "The one-line summary under the wordmark."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Base text and empty-state sentences."
+      },
+      "body-small": {
+        "displayName": "Body Small",
+        "purpose": "Run row details and the temper legend."
+      },
+      "meta": {
+        "displayName": "Meta",
+        "purpose": "Relative time, footer line, command buttons."
+      },
+      "mono": {
+        "displayName": "Mono",
+        "purpose": "Inline shell commands."
+      }
+    },
+    "shadows": [
+      {
+        "name": "bar-edge",
+        "value": "inset 0 0 0 1px rgb(0 0 0 / 0.16)",
+        "purpose": "Hairline edge on every filled temper bar."
+      },
+      {
+        "name": "hollow-steel",
+        "value": "inset 0 0 0 1.5px var(--scale)",
+        "purpose": "Outline replacing the fill for failed, timed out and disconnected."
+      },
+      {
+        "name": "menu-lift",
+        "value": "0 8px 24px rgb(0 0 0 / 0.2)",
+        "purpose": "Settings menu only, the one surface that overlays the list."
+      }
+    ],
+    "motion": [
+      {
+        "name": "heat",
+        "value": "1.6s ease-in-out infinite alternate",
+        "purpose": "Running and publishing bars heat from bronze toward straw."
+      },
+      {
+        "name": "goggles",
+        "value": "translate 0.25s cubic-bezier(0.2, 0.8, 0.2, 1)",
+        "purpose": "Mascot goggles drop when work starts."
+      },
+      {
+        "name": "breathe",
+        "value": "3.6s ease-in-out infinite (4.5s asleep)",
+        "purpose": "Idle and asleep mascot breath."
+      },
+      {
+        "name": "blink",
+        "value": "5s infinite",
+        "purpose": "Idle mascot blink."
+      },
+      {
+        "name": "squash",
+        "value": "0.8s ease-in-out infinite",
+        "purpose": "Working mascot squash and stretch, with sparks flashing on the same 0.8s beat."
+      },
+      {
+        "name": "hop",
+        "value": "1.2s cubic-bezier(0.3, 0, 0.3, 1) infinite",
+        "purpose": "Happy mascot hop."
+      },
+      {
+        "name": "wave",
+        "value": "0.9s ease-in-out infinite alternate",
+        "purpose": "Waiting mascot wave, with a 1.8s alert nudge."
+      },
+      {
+        "name": "drift",
+        "value": "2.4s ease-in-out infinite",
+        "purpose": "Asleep sleep marks, second mark delayed 0.6s."
+      },
+      {
+        "name": "look",
+        "value": "3s ease-in-out infinite",
+        "purpose": "Lost mascot looking side to side."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "animation: none",
+        "purpose": "prefers-reduced-motion stops every animation; each mood reads still."
+      }
+    ],
+    "breakpoints": []
+  },
+  "components": [
+    {
+      "name": "Temper Bar",
+      "kind": "custom",
+      "refersTo": "temper-bar",
+      "description": "Bar stock carrying run state: straw, bronze (heating), purple, blue, hollow cold steel.",
+      "html": "<span class=\"ds-bar\" data-temper=\"queued\"></span> <span class=\"ds-bar\" data-temper=\"running\"></span> <span class=\"ds-bar\" data-temper=\"awaiting_approval\"></span> <span class=\"ds-bar\" data-temper=\"published\"></span> <span class=\"ds-bar\" data-temper=\"failed\"></span> ",
+      "css": ".ds-bar { display: inline-block; width: 18px; height: 7px; border-radius: 2px; background: var(--temper, var(--faint, #a99f92)); box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.16); } .ds-bar[data-temper=\"queued\"] { --temper: var(--straw, #dcb04e); } .ds-bar[data-temper=\"running\"] { --temper: var(--bronze, #b06a2a); animation: ds-heat 1.6s ease-in-out infinite alternate; } .ds-bar[data-temper=\"awaiting_approval\"] { --temper: var(--purple, #6b3d8c); } .ds-bar[data-temper=\"published\"] { --temper: var(--blue, #2b579c); } .ds-bar[data-temper=\"failed\"] { background: none; box-shadow: inset 0 0 0 1.5px var(--scale, #868d95); } @keyframes ds-heat { to { background: color-mix(in srgb, var(--bronze, #b06a2a), var(--straw, #dcb04e) 60%); } } @media (prefers-reduced-motion: reduce) { .ds-bar { animation: none; } }"
+    },
+    {
+      "name": "Run Row",
+      "kind": "card",
+      "refersTo": "run-row",
+      "description": "A run: identifier headline, muted details, temper bar at left; well fill on hover.",
+      "html": "<button class=\"ds-row\"><span class=\"ds-bar\" data-temper=\"running\"></span><span class=\"ds-id\">ENG-139</span><span class=\"ds-time\">1 min ago</span><span class=\"ds-repo\">acme/web@main</span><span class=\"ds-status\">Running</span></button>",
+      "css": ".ds-bar { display: inline-block; width: 18px; height: 7px; border-radius: 2px; background: var(--temper, var(--faint, #a99f92)); box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.16); } .ds-bar[data-temper=\"queued\"] { --temper: var(--straw, #dcb04e); } .ds-bar[data-temper=\"running\"] { --temper: var(--bronze, #b06a2a); animation: ds-heat 1.6s ease-in-out infinite alternate; } .ds-bar[data-temper=\"awaiting_approval\"] { --temper: var(--purple, #6b3d8c); } .ds-bar[data-temper=\"published\"] { --temper: var(--blue, #2b579c); } .ds-bar[data-temper=\"failed\"] { background: none; box-shadow: inset 0 0 0 1.5px var(--scale, #868d95); } @keyframes ds-heat { to { background: color-mix(in srgb, var(--bronze, #b06a2a), var(--straw, #dcb04e) 60%); } } @media (prefers-reduced-motion: reduce) { .ds-bar { animation: none; } } .ds-row { position: relative; display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 8px; width: 400px; padding: 4px 8px 4px 40px; line-height: 16px; border: 0; border-radius: 9px; background: none; text-align: left; font: 12px/16px system-ui, -apple-system, \"Segoe UI\", Ubuntu, sans-serif; color: var(--ink, #221e1a); font-variant-numeric: tabular-nums; cursor: pointer; } .ds-row:hover { background: var(--well, #e8e1d5); } .ds-row:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; } .ds-row > .ds-bar { position: absolute; top: 12px; left: 12px; } .ds-row::after { content: \"\"; order: 3; flex-basis: 100%; } .ds-id { order: 1; font: 700 16px/24px \"Big Shoulders\", system-ui, sans-serif; letter-spacing: 0.01em; } .ds-time { order: 2; margin-left: auto; font-size: 11.5px; color: var(--muted, #675f55); } .ds-repo { order: 4; color: var(--muted, #675f55); } .ds-status { order: 5; color: var(--muted, #675f55); } .ds-status::before { content: \"·\"; margin-right: 8px; color: var(--faint, #a99f92); } .ds-hint { order: 7; flex-basis: 100%; font-weight: 650; } "
+    },
+    {
+      "name": "Hot Bar",
+      "kind": "card",
+      "refersTo": "hot-bar",
+      "description": "Awaiting-approval section as a purple field; hover underlines the identifier instead of painting a card.",
+      "html": "<section class=\"ds-hot\"><h2 class=\"ds-h2\">Awaiting approval (1)</h2><button class=\"ds-row\"><span class=\"ds-bar\" data-temper=\"awaiting_approval\"></span><span class=\"ds-id\">ENG-142</span><span class=\"ds-time\">4 min ago</span><span class=\"ds-repo\">acme/web@main</span><span class=\"ds-status\">Awaiting approval</span><span class=\"ds-hint\">Reply /publish on the issue</span></button></section>",
+      "css": ".ds-bar { display: inline-block; width: 18px; height: 7px; border-radius: 2px; background: var(--temper, var(--faint, #a99f92)); box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.16); } .ds-bar[data-temper=\"queued\"] { --temper: var(--straw, #dcb04e); } .ds-bar[data-temper=\"running\"] { --temper: var(--bronze, #b06a2a); animation: ds-heat 1.6s ease-in-out infinite alternate; } .ds-bar[data-temper=\"awaiting_approval\"] { --temper: var(--purple, #6b3d8c); } .ds-bar[data-temper=\"published\"] { --temper: var(--blue, #2b579c); } .ds-bar[data-temper=\"failed\"] { background: none; box-shadow: inset 0 0 0 1.5px var(--scale, #868d95); } @keyframes ds-heat { to { background: color-mix(in srgb, var(--bronze, #b06a2a), var(--straw, #dcb04e) 60%); } } @media (prefers-reduced-motion: reduce) { .ds-bar { animation: none; } } .ds-row { position: relative; display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 8px; width: 400px; padding: 4px 8px 4px 40px; line-height: 16px; border: 0; border-radius: 9px; background: none; text-align: left; font: 12px/16px system-ui, -apple-system, \"Segoe UI\", Ubuntu, sans-serif; color: var(--ink, #221e1a); font-variant-numeric: tabular-nums; cursor: pointer; } .ds-row:hover { background: var(--well, #e8e1d5); } .ds-row:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; } .ds-row > .ds-bar { position: absolute; top: 12px; left: 12px; } .ds-row::after { content: \"\"; order: 3; flex-basis: 100%; } .ds-id { order: 1; font: 700 16px/24px \"Big Shoulders\", system-ui, sans-serif; letter-spacing: 0.01em; } .ds-time { order: 2; margin-left: auto; font-size: 11.5px; color: var(--muted, #675f55); } .ds-repo { order: 4; color: var(--muted, #675f55); } .ds-status { order: 5; color: var(--muted, #675f55); } .ds-status::before { content: \"·\"; margin-right: 8px; color: var(--faint, #a99f92); } .ds-hint { order: 7; flex-basis: 100%; font-weight: 650; }  .ds-h2 { margin: 0 8px 8px; font: 700 12.5px/16px \"Big Shoulders\", system-ui, sans-serif; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); } .ds-hot { width: 400px; padding: 8px 0; border-radius: 12px; background: var(--hot, #6b3d8c); color: var(--on-hot, #fbf8f2); --muted: color-mix(in srgb, #fbf8f2 78%, #6b3d8c); --faint: color-mix(in srgb, #fbf8f2 50%, #6b3d8c); } .ds-hot .ds-row { color: inherit; } .ds-hot .ds-bar { background: #fbf8f2; } .ds-hot .ds-row:hover { background: none; } .ds-hot .ds-row:hover .ds-id { text-decoration: underline 2px; text-underline-offset: 3px; }"
+    },
+    {
+      "name": "Section Heading",
+      "kind": "custom",
+      "refersTo": "section-heading",
+      "description": "Uppercase display-face label with count, muted.",
+      "html": "<h2 class=\"ds-h2\">Running (1)</h2>",
+      "css": ".ds-h2 { margin: 0 8px; font: 700 12.5px/16px \"Big Shoulders\", system-ui, sans-serif; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted, #675f55); }"
+    },
+    {
+      "name": "Connection Line",
+      "kind": "nav",
+      "refersTo": "connection-line",
+      "description": "Footer connection: solid ink dot when connected, hollow cold steel when disconnected; settings button at right.",
+      "html": "<footer class=\"ds-foot\"><p class=\"ds-pill\" data-tone=\"ok\">Connected · Updated just now</p><button class=\"ds-gear\" aria-label=\"Settings\"><svg viewBox=\"0 0 16 16\"><path d=\"M2.5 5h11M2.5 11h11\"/><circle cx=\"6\" cy=\"5\" r=\"1.8\"/><circle cx=\"10.5\" cy=\"11\" r=\"1.8\"/></svg></button></footer><footer class=\"ds-foot\"><p class=\"ds-pill\" data-tone=\"bad\">Disconnected</p></footer>",
+      "css": ".ds-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 400px; padding: 8px 8px 8px 16px; border-top: 1px solid var(--rule, #dcd3c5); font: 11.5px system-ui, -apple-system, \"Segoe UI\", Ubuntu, sans-serif; color: var(--muted, #675f55); } .ds-pill { margin: 0; } .ds-pill::before { content: \"\"; display: inline-block; margin-right: 8px; vertical-align: 1px; width: 7px; height: 7px; border-radius: 50%; background: var(--faint, #a99f92); } .ds-pill[data-tone=\"ok\"]::before { background: var(--ink, #221e1a); } .ds-pill[data-tone=\"bad\"]::before { background: none; box-shadow: inset 0 0 0 1.5px var(--scale, #868d95); } .ds-gear { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 50%; background: none; color: inherit; } .ds-gear:hover { background: var(--well, #e8e1d5); color: var(--ink, #221e1a); } .ds-gear:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; } .ds-gear svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; } .ds-gear circle { fill: currentColor; }"
+    },
+    {
+      "name": "Settings Menu",
+      "kind": "custom",
+      "refersTo": "menu",
+      "description": "Upward-opening menu: ground panel, rule border, the one lifted shadow; well hover on items.",
+      "html": "<div class=\"ds-menu\"><label class=\"ds-item\"><input type=\"checkbox\"> Open at login</label><button class=\"ds-item\">Open README</button><button class=\"ds-item\">Quit</button></div>",
+      "css": ".ds-menu { display: grid; gap: 2px; width: 180px; padding: 6px; border: 1px solid var(--rule, #dcd3c5); border-radius: 12px; background: var(--ground, #f3eee5); box-shadow: 0 8px 24px rgb(0 0 0 / 0.2); font: 12.5px system-ui, -apple-system, \"Segoe UI\", Ubuntu, sans-serif; color: var(--ink, #221e1a); } .ds-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 0; border-radius: 8px; background: none; font: inherit; color: inherit; text-align: left; } .ds-item:hover { background: var(--well, #e8e1d5); } .ds-item:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; } .ds-item input { margin: 0; }"
+    },
+    {
+      "name": "Command Chip",
+      "kind": "chip",
+      "refersTo": "command-button",
+      "description": "Shell command in a mono well chip with a pill Copy button, for empty states.",
+      "html": "<p class=\"ds-cmd\"><code class=\"ds-code\">autoforge serve</code><button class=\"ds-copy\">Copy</button></p>",
+      "css": ".ds-cmd { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 384px; margin: 0; font: 13px/1.4 system-ui, -apple-system, \"Segoe UI\", Ubuntu, sans-serif; color: var(--ink, #221e1a); } .ds-code { padding: 2px 6px; border-radius: 5px; background: var(--well, #e8e1d5); font: 11.5px ui-monospace, \"SF Mono\", Menlo, Consolas, monospace; white-space: nowrap; } .ds-copy { padding: 3px 10px; border: 1px solid var(--rule, #dcd3c5); border-radius: 999px; background: none; font: 11.5px system-ui, -apple-system, \"Segoe UI\", Ubuntu, sans-serif; color: inherit; } .ds-copy:hover { background: var(--well, #e8e1d5); } .ds-copy:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }"
+    },
+    {
+      "name": "The Ember",
+      "kind": "custom",
+      "refersTo": "mascot",
+      "description": "Signature mascot in its idle mood: straw body, open eyes, small smile, goggles up.",
+      "html": "<div class=\"ds-mascot\"><svg viewBox=\"0 0 100 92\"><ellipse class=\"ds-m-ground\" cx=\"50\" cy=\"87.5\" rx=\"24\" ry=\"3.5\"/><g class=\"ds-m-figure\"><g class=\"ds-m-feet\"><ellipse class=\"ds-m-tone\" cx=\"40\" cy=\"83\" rx=\"7.5\" ry=\"4.5\"/><ellipse class=\"ds-m-tone\" cx=\"60\" cy=\"83\" rx=\"7.5\" ry=\"4.5\"/></g><path class=\"ds-m-body\" d=\"M50 8C60 20 84 28 84 56C84 74 69 85 50 85C31 85 16 74 16 56C16 28 40 20 50 8Z\"/><path class=\"ds-m-shade\" d=\"M20 64C26 77 38 82 50 82C63 82 74 76 80 64C74 73 63 78 50 78C37 78 26 73 20 64Z\"/><path class=\"ds-m-sheen\" d=\"M27 44C29 33 37 25 45 20\"/><ellipse class=\"ds-m-tone ds-m-arm-l\" cx=\"17\" cy=\"61\" rx=\"5.5\" ry=\"7.5\"/><ellipse class=\"ds-m-tone ds-m-arm-r\" cx=\"83\" cy=\"61\" rx=\"5.5\" ry=\"7.5\"/><g class=\"ds-m-cheeks\"><ellipse cx=\"31\" cy=\"64\" rx=\"4.6\" ry=\"2.6\"/><ellipse cx=\"69\" cy=\"64\" rx=\"4.6\" ry=\"2.6\"/></g><g class=\"ds-m-v ds-m-eyes\"><g class=\"ds-m-eye\"><ellipse class=\"ds-m-socket\" cx=\"41\" cy=\"55\" rx=\"4.5\" ry=\"5.5\"/><g class=\"ds-m-pupil\"><ellipse class=\"ds-m-dark\" cx=\"41\" cy=\"55\" rx=\"3.4\" ry=\"4.4\"/><circle class=\"ds-m-glint\" cx=\"40\" cy=\"53.2\" r=\"1.3\"/></g></g><g class=\"ds-m-eye\"><ellipse class=\"ds-m-socket\" cx=\"59\" cy=\"55\" rx=\"4.5\" ry=\"5.5\"/><g class=\"ds-m-pupil\"><ellipse class=\"ds-m-dark\" cx=\"59\" cy=\"55\" rx=\"3.4\" ry=\"4.4\"/><circle class=\"ds-m-glint\" cx=\"58\" cy=\"53.2\" r=\"1.3\"/></g></g></g><g class=\"ds-m-v ds-m-line ds-m-brows-up\"><path d=\"M36 46q4.5-3 9-1\"/><path d=\"M55 45q4.5-2 9 1\"/></g><g class=\"ds-m-v ds-m-line ds-m-brows-sad\"><path d=\"M36 48.5L45 45.5\"/><path d=\"M55 45.5L64 48.5\"/></g><g class=\"ds-m-v ds-m-line ds-m-eyes-happy\"><path d=\"M36 57q5-6.5 10 0\"/><path d=\"M54 57q5-6.5 10 0\"/></g><g class=\"ds-m-v ds-m-line ds-m-eyes-closed\"><path d=\"M36 55q5 4 10 0\"/><path d=\"M54 55q5 4 10 0\"/></g><path class=\"ds-m-v ds-m-line ds-m-m-smile\" d=\"M46 65q4 3.5 8 0\"/><g class=\"ds-m-v ds-m-m-grin\"><path class=\"ds-m-dark\" d=\"M44.5 64h11q-1 7-5.5 7t-5.5-7z\"/><path class=\"ds-m-tongue\" d=\"M47 69q3-2 6 0q-1.2 2-3 2t-3-2z\"/></g><ellipse class=\"ds-m-v ds-m-dark ds-m-m-o\" cx=\"50\" cy=\"67\" rx=\"2.8\" ry=\"3.4\"/><ellipse class=\"ds-m-v ds-m-dark ds-m-m-small\" cx=\"50\" cy=\"66.5\" rx=\"1.8\" ry=\"2\"/><path class=\"ds-m-v ds-m-line ds-m-m-frown\" d=\"M46 68.5q4-3.5 8 0\"/><path class=\"ds-m-v ds-m-line ds-m-m-wavy\" d=\"M44.5 66.5q1.4-1.6 2.8 0t2.8 0t2.8 0t2.8 0\"/><g class=\"ds-m-goggles\"><path class=\"ds-m-strap\" d=\"M17 38Q50 26 83 38\"/><circle class=\"ds-m-lens\" cx=\"41\" cy=\"33\" r=\"7\"/><circle class=\"ds-m-lens\" cx=\"59\" cy=\"33\" r=\"7\"/><path class=\"ds-m-lens-glint\" d=\"M37 31q1.5-2.2 4.2-2.4M55 31q1.5-2.2 4.2-2.4\"/></g></g><g class=\"ds-m-v ds-m-sparks\"><path d=\"M10 30l-6-3M11 41l-7 1M90 30l6-3M89 41l7 1\"/></g><g class=\"ds-m-v ds-m-sparkles\"><path class=\"ds-m-star\" d=\"M14 10l1.6 4l4 1.6l-4 1.6l-1.6 4l-1.6-4l-4-1.6l4-1.6z\"/><path class=\"ds-m-star\" d=\"M86 18l1.1 2.7l2.7 1.1l-2.7 1.1l-1.1 2.7l-1.1-2.7l-2.7-1.1l2.7-1.1z\"/></g><g class=\"ds-m-v ds-m-alert\"><path class=\"ds-m-line\" stroke-width=\"3.6\" d=\"M86 5v11\"/><circle class=\"ds-m-dark\" cx=\"86\" cy=\"21.5\" r=\"2.2\"/></g><g class=\"ds-m-v ds-m-line ds-m-zz\"><path d=\"M74 14h6l-6 7h6\"/><path d=\"M84 4h4.5l-4.5 5h4.5\"/></g><g class=\"ds-m-v ds-m-question\"><path class=\"ds-m-line\" stroke-width=\"3\" d=\"M79 9q0-6 6-6t6 5q0 3.5-5 5v3\"/><circle class=\"ds-m-dark\" cx=\"86\" cy=\"21\" r=\"1.9\"/></g><path class=\"ds-m-v ds-m-sweat\" d=\"M75 36q2.8 3.8 2.8 5.8a2.8 2.8 0 0 1-5.6 0q0-2 2.8-5.8z\"/></svg></div>",
+      "css": ".ds-mascot { width: 112px; --body: var(--straw, #dcb04e); --m-ink: #1d1916; } .ds-mascot svg { display: block; width: 100%; overflow: visible; } .ds-mascot .ds-m-v { display: none; } .ds-mascot :is(.ds-m-eyes, .ds-m-m-smile) { display: inline; } .ds-mascot .ds-m-body { fill: var(--body); } .ds-mascot .ds-m-tone { fill: color-mix(in srgb, var(--body), #000 14%); } .ds-mascot .ds-m-shade { fill: #000; opacity: 0.1; } .ds-mascot .ds-m-sheen { fill: none; stroke: #fff; stroke-width: 4; stroke-linecap: round; opacity: 0.4; } .ds-mascot .ds-m-ground { fill: #000; opacity: 0.14; } .ds-mascot .ds-m-cheeks { fill: #ff8a8a; opacity: 0.45; } .ds-mascot .ds-m-socket { fill: none; } .ds-mascot .ds-m-dark { fill: var(--m-ink); } .ds-mascot .ds-m-glint { fill: #fff; } .ds-mascot :is(.ds-m-line, .ds-m-lens-glint) { fill: none; stroke: var(--m-ink); stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; } .ds-mascot .ds-m-lens-glint { stroke: #fff; stroke-width: 1.8; } .ds-mascot .ds-m-strap { fill: none; stroke: var(--m-ink); stroke-width: 4.5; stroke-linecap: round; } .ds-mascot .ds-m-lens { fill: #cfe0ea; stroke: var(--m-ink); stroke-width: 2.6; } .ds-mascot .ds-m-figure { transform-box: view-box; transform-origin: 50px 86px; animation: ds-breathe 3.6s ease-in-out infinite; } @keyframes ds-breathe { 50% { scale: 1.02 0.97; } } @media (prefers-reduced-motion: reduce) { .ds-mascot * { animation: none !important; } }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Smith's Tempering Chart",
+    "overview": "**Creative North Star: \"The Smith's Tempering Chart\"**\n\nEvery run is a piece of steel at a small smith's anvil, and its temper colour is its state. The tray panel reads like a workshop chart pinned above the bench: chalk ground, soot ink, and the oxide colours steel takes as it heats (straw, bronze, purple, blue) as the only hues. Cold steel grey is the colour of failure and age. Light mode is chalk on workshop paper; dark mode is soot with chalk ink. Neither glows.\n\nThe panel is dense and quiet. It is 400px wide with its height following the content, and everything snaps to one 8px cell. A plush ember mascot stands on a heavy bench line at the top and carries the mood of the whole forge; below it, the list of runs reads as a rack of labelled bar stock. The issue identifier is each row's headline, set in a condensed industrial display face. Status is a short bar of tempered steel, never a coloured pill.\n\nWhat waits on the user rises to the top as the hot bar: a purple field that holds the runs awaiting approval until the user acts. It is the one loud surface; the rest of the panel stays in chalk and ink.\n\n- Four temper hues plus cold steel, each bound to exactly one run state.\n- Chalk and soot grounds, switched by `prefers-color-scheme`, with no glow in either.\n- One 8px cell; rows are whole cells (48px, 64px with the approval hint).\n- Big Shoulders for the wordmark, identifiers and section headings; system UI for everything else.\n- A plush ember mascot whose body takes the mood's temper colour, with seven moods that each read still.\n- Failure is drawn hollow, so state never rests on colour alone.",
+    "keyCharacteristics": [
+      "Four temper hues plus cold steel, each bound to exactly one run state.",
+      "Chalk and soot grounds, switched by `prefers-color-scheme`, with no glow in either.",
+      "One 8px cell; rows are whole cells (48px, 64px with the approval hint).",
+      "Big Shoulders for the wordmark, identifiers and section headings; system UI for everything else.",
+      "A plush ember mascot whose body takes the mood's temper colour, with seven moods that each read still.",
+      "Failure is drawn hollow, so state never rests on colour alone."
+    ],
+    "rules": [
+      {
+        "name": "The Temper Rule",
+        "body": "A temper hue means a run state and nothing else. Queued is straw, running and publishing are bronze, awaiting approval is purple, published is blue, failed and timed out are cold steel. No hue outside this set enters the UI.",
+        "section": "colors"
+      },
+      {
+        "name": "The Hollow Failure Rule",
+        "body": "Failed and timed-out steel is drawn as a 1.5px cold-steel outline with no fill, in the bar, the activity rack and the disconnected dot. State never rests on colour alone.",
+        "section": "colors"
+      },
+      {
+        "name": "The Ink Indicator Rule",
+        "body": "An indicator that is not a run state uses ink, not a temper hue. The connected dot is solid ink.",
+        "section": "colors"
+      },
+      {
+        "name": "The Stamped Tag Rule",
+        "body": "Big Shoulders is reserved for the wordmark, identifiers and section headings. Sentences, statuses and controls are never set in it.",
+        "section": "typography"
+      },
+      {
+        "name": "The One Cell Rule",
+        "body": "Spacing, row heights and indents are whole or half 8px cells. A value off that grid is a defect, not a variant.",
+        "section": "layout"
+      },
+      {
+        "name": "The No Glow Rule",
+        "body": "Nothing glows. The dark panel is soot, not a lit forge: no coloured halos, no gradients behind content, no orange bloom.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** bind every temper hue to its run state through the `data-status` or `data-temper` hook, so one rule colours the bar, the rack and the legend; the mascot takes the same hue through its mood.",
+      "**Do** draw failed and timed-out steel hollow (1.5px cold-steel inset outline, no fill).",
+      "**Do** snap every spacing value to the 8px cell and keep rows at 48px, or 64px with the approval hint.",
+      "**Do** set the wordmark, identifiers and section headings in Big Shoulders and everything else in system UI with tabular numbers.",
+      "**Do** use ink for indicators that are not run states, such as the connected dot.",
+      "**Do** make every mascot mood readable with motion off: `prefers-reduced-motion` stops all animation.",
+      "**Do** put all styling in the linked same-origin stylesheet. The CSP allows no inline styles; SVG is inline markup built from constants.",
+      "**Do** keep the `data-*` hooks stable. Tests use them as contracts."
+    ],
+    "donts": [
+      "**Don't** add a hue outside the temper set to the UI. Blush, lens and sweat live inside the mascot only.",
+      "**Don't** use a temper hue for anything that is not a run state: connection, links, toggles, selection or success messages.",
+      "**Don't** show status as a coloured pill. Status is a temper bar plus a muted word.",
+      "**Don't** let the dark panel glow: no orange halo, no coloured shadow, no gradient behind content.",
+      "**Don't** paint a hover card inside the hot bar or nest a card inside any field. Underline the identifier instead.",
+      "**Don't** set sentences or controls in the display face, or make a whole empty state bold.",
+      "**Don't** set style attributes or inject stylesheets at runtime."
+    ]
+  }
+}
